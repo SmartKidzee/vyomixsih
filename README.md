@@ -11,10 +11,10 @@
 
   <br />
 
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=3000&pause=1000&color=38BDF8&center=true&vCenter=true&width=600&lines=Analyze+optical+and+SAR+satellite+imagery;Detect+bi-temporal+changes+instantly;Orchestrate+multi-agent+evidence+fusion;Client-side+Gemini+Vision+Integration" />
-    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=20&duration=3000&pause=1000&color=0369A1&center=true&vCenter=true&width=600&lines=Analyze+optical+and+SAR+satellite+imagery;Detect+bi-temporal+changes+instantly;Orchestrate+multi-agent+evidence+fusion;Client-side+Gemini+Vision+Integration" alt="Typing SVG" />
-  </picture>
+  <!-- Animated Typing SVG -->
+  <a href="#">
+    <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=22&duration=3000&pause=1000&color=38BDF8&center=true&vCenter=true&width=600&lines=Analyze+optical+and+SAR+satellite+imagery;Detect+bi-temporal+changes+instantly;Orchestrate+multi-agent+evidence+fusion;Client-side+Gemini+Vision+Integration" alt="Typing SVG" />
+  </a>
 
 </div>
 
@@ -63,16 +63,16 @@ Earth Query Lens is a fully client-side conversational AI interface for analyzin
   <img src="https://raw.githubusercontent.com/tandpfun/skill-icons/main/icons/TypeScript.svg" height="40" alt="TypeScript" />
 </div>
 
-- **Framework:** React + Vite + TanStack Router
+- **Framework:** React + Vite + TanStack Router (TanStack Start)
 - **Styling:** Tailwind CSS v4 + Radix UI
 - **Geospatial Processing:** `geotiff.js` for in-browser client-side `.tif` conversion
 - **LLM Engine:** Direct `fetch` requests to Gemini API (`gemini-3.6-flash`) for instantaneous zero-server processing.
 
 ## 📦 Deployment (Vercel)
 
-This project is pre-configured for Vercel. 
+This project is optimized for Vercel with zero-configuration needed. 
 1. Push this repository to GitHub.
 2. Import the project in Vercel.
-3. Ensure the Build Command is `npm run build` and the Output Directory is `.output/public`.
+3. Vercel will automatically detect the build settings (using the `vercel` preset configured in Vite).
 4. Add `VITE_GEMINI_API_KEY` to Vercel Environment Variables.
 5. Deploy!
