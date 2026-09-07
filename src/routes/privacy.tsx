@@ -1,19 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Shield } from "lucide-react";
 
-export const Route = createFileRoute("/privacy")({
-  head: () => ({
-    meta: [
-      { title: "Privacy Policy — Earth Query Lens — VYOMIX" },
-      { name: "description", content: "Privacy Policy for Earth Query Lens by VYOMIX." },
-    ],
-  }),
-  component: PrivacyPage,
-});
-
-function PrivacyPage() {
+export default function PrivacyPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Navbar />

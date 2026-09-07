@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Satellite, Send, Paperclip, X, Loader2, AlertCircle, ChevronDown,
@@ -13,15 +13,7 @@ import {
 } from "@/lib/satquery";
 import type { UploadedImage } from "@/components/UploadPanel";
 
-export const Route = createFileRoute("/")(({
-  head: () => ({
-    meta: [
-      { title: "Earth Query Lens — VYOMIX" },
-      { name: "description", content: "Satellite imagery analysis powered by multimodal AI." },
-    ],
-  }),
-  component: Index,
-} as any));
+
 
 interface ChatMessage {
   id: string;
@@ -198,7 +190,7 @@ function AssistantBubble({ msg }: { msg: ChatMessage }) {
 }
 
 /* Main component */
-function Index() {
+export default function Index() {
   const { isLoggedIn } = useAuth();
   const navigate = useNavigate();
 
@@ -243,7 +235,7 @@ function Index() {
 
   const submit = async () => {
     if (busy) return;
-    if (!isLoggedIn) { void navigate({ to: "/login", search: { redirect: "/" } }); return; }
+    if (!isLoggedIn) { navigate("/login"); return; }
     if (pendingImages.length === 0) {
       setMessages((p) => [...p, { id: Math.random().toString(), role: "assistant", error: "Please attach at least one image before sending." }]);
       return;

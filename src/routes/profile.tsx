@@ -1,26 +1,16 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { User as UserIcon, Mail, Shield, LogOut, Sparkles } from "lucide-react";
 
-export const Route = createFileRoute("/profile")({
-  head: () => ({
-    meta: [
-      { title: "Profile — Earth Query Lens — VYOMIX" },
-      { name: "description", content: "User profile details for Earth Query Lens." },
-    ],
-  }),
-  component: ProfilePage,
-});
-
-function ProfilePage() {
+export default function ProfilePage() {
   const { user, isLoggedIn, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
-    void navigate({ to: "/" });
+    navigate("/");
   };
 
   if (!isLoggedIn) {

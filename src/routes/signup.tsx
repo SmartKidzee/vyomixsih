@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Navbar } from "@/components/Navbar";
@@ -28,17 +28,7 @@ function GoogleIcon() {
   );
 }
 
-export const Route = createFileRoute("/signup")({
-  head: () => ({
-    meta: [
-      { title: "Sign Up — Earth Query Lens — VYOMIX" },
-      { name: "description", content: "Create your Earth Query Lens account." },
-    ],
-  }),
-  component: SignupPage,
-});
-
-function SignupPage() {
+export default function SignupPage() {
   const { signup, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
@@ -52,7 +42,7 @@ function SignupPage() {
   const [busy, setBusy] = useState(false);
 
   const handleSuccessRedirect = () => {
-    void navigate({ to: "/" });
+    navigate("/");
   };
 
   const handleSubmit = (e: React.FormEvent) => {

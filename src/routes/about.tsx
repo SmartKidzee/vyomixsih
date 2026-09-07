@@ -1,19 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { AboutSection } from "@/components/AboutSection";
 
-export const Route = createFileRoute("/about")({
-  head: () => ({
-    meta: [
-      { title: "About — Earth Query Lens — VYOMIX" },
-      { name: "description", content: "Learn about Earth Query Lens, a VYOMIX project." },
-    ],
-  }),
-  component: AboutPage,
-});
-
-function AboutPage() {
+export default function AboutPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Navbar />

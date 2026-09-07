@@ -1,7 +1,7 @@
 import { ArrowDown, Sparkles, ShieldCheck, Layers } from "lucide-react";
 import earthBg from "@/assets/earth_orbital_bg.png";
 import { useAuth } from "@/lib/auth-context";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 
 const NAV = [
   { label: "Analyse", href: "#workspace", active: true },
@@ -17,7 +17,7 @@ export function Hero() {
   const handleAuthGatedClick = (e: React.MouseEvent, targetHash: string = "#workspace") => {
     if (!isLoggedIn) {
       e.preventDefault();
-      void navigate({ to: "/login", search: { redirect: targetHash } });
+      navigate("/login");
     }
   };
 

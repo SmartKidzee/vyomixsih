@@ -1,19 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { FileText } from "lucide-react";
 
-export const Route = createFileRoute("/terms")({
-  head: () => ({
-    meta: [
-      { title: "Terms & Conditions — Earth Query Lens — VYOMIX" },
-      { name: "description", content: "Terms & Conditions for Earth Query Lens by VYOMIX." },
-    ],
-  }),
-  component: TermsPage,
-});
-
-function TermsPage() {
+export default function TermsPage() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Navbar />
