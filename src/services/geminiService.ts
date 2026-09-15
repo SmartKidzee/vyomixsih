@@ -21,7 +21,7 @@ async function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
     reader.onload = () => {
       const base64String = (reader.result as string).split(',')[1];
-      resolve(base64String);
+      resolve(base64String || "");
     };
     reader.onerror = error => reject(error);
   });
@@ -33,8 +33,10 @@ async function convertTiffToPngBase64(file: File): Promise<string> {
   const image = await tiff.getImage();
   const width = image.getWidth();
   const height = image.getHeight();
-  const rgb = await image.readRGB();
-
+  
+  // Robust raster reading for SAR (1-band), multi-band, and 16-bit float TIFFs
+  const rasters = (await image.readRasters()) as any;
+  
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -42,16 +44,29 @@ async function convertTiffToPngBase64(file: File): Promise<string> {
   if (!ctx) throw new Error("Could not create canvas context");
 
   const imageData = ctx.createImageData(width, height);
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    imageData.data[i] = rgb[i / 4 * 3];
-    imageData.data[i + 1] = rgb[i / 4 * 3 + 1];
-    imageData.data[i + 2] = rgb[i / 4 * 3 + 2];
-    imageData.data[i + 3] = 255; // Alpha
+  const band1 = rasters[0];
+  const band2 = rasters.length > 1 ? rasters[1] : rasters[0];
+  const band3 = rasters.length > 2 ? rasters[2] : rasters[0];
+
+  // Fast auto-contrast (approximate min/max)
+  let min = Infinity, max = -Infinity;
+  const step = Math.max(1, Math.floor(band1.length / 10000)); 
+  for (let i = 0; i < band1.length; i += step) {
+    if (band1[i] < min) min = band1[i];
+    if (band1[i] > max) max = band1[i];
+  }
+  const range = (max - min) || 1;
+
+  for (let i = 0; i < band1.length; i++) {
+    imageData.data[i * 4] = ((band1[i] - min) / range) * 255;
+    imageData.data[i * 4 + 1] = ((band2[i] - min) / range) * 255;
+    imageData.data[i * 4 + 2] = ((band3[i] - min) / range) * 255;
+    imageData.data[i * 4 + 3] = 255; // Alpha
   }
   ctx.putImageData(imageData, 0, 0);
 
   const dataUrl = canvas.toDataURL('image/png');
-  return dataUrl.split(',')[1]; // Return only base64
+  return dataUrl.split(',')[1] || "";
 }
 
 async function processImageForGemini(file: File): Promise<{mimeType: string, data: string}> {
@@ -76,10 +91,12 @@ export async function analyzeWithGemini(
 
   const parts: any[] = [];
   parts.push({
-    text: `You are an advanced Satellite Imagery Analysis Model named "Sentinel-SAR-Analyzer". 
-Your task is to analyze the provided images and respond to the query: "${query}". 
+    text: `You are an advanced Spatial Intelligence Model. 
+Your task is to analyze the provided images and respond accurately to the query: "${query}". 
 
-If multiple images are provided, it is a bi-temporal (change detection) or multi-modal task.
+CRITICAL REQUIREMENT: For queries detecting "water bodies", "lakes", "rivers", "sea", or similar features, you MUST precisely extract accurate normalized bounding boxes enclosing ONLY the actual water bodies. Do not hallucinate bounding boxes. If no water is clearly visible, return an empty grounding array.
+
+If multiple images are provided, it is a bi-temporal (change detection) or multi-modal task. Image 1 is the Pre-Event Baseline, and Image 2 is the Post-Event Observation.
 
 Respond STRICTLY in JSON format matching this interface:
 {
@@ -88,47 +105,64 @@ Respond STRICTLY in JSON format matching this interface:
   "model": "Sentinel-SAR-Analyzer",
   "task": "Scene VQA, Grounding, or Change Detection",
   "evidence": [{"type": "visual", "label": "Observation", "detail": "What you see"}],
-  "grounding": [{"bbox": [minX, minY, maxX, maxY], "label": "Feature name", "confidence": 90}], // Use NORMALIZED float values between 0.0 and 1.0 (e.g. 0.1, 0.25). e.g. [10, 10, 50, 50]
-  "change": {"change_detected": true/false, "description": "What changed"},
+  "grounding": [{"bbox": [minX, minY, maxX, maxY], "label": "Feature name", "confidence": 90}], // Use NORMALIZED float values between 0.0 and 1.0 (e.g. 0.1, 0.25)
+  "change": {"change_detected": true/false, "description": "What changed", "changed_area_percent": 15.5},
   "metadata": [{"filename": "...", "modality": "optical"}]
 }
 Only output the JSON object without any markdown wrappers.`
   });
 
-  for (const file of files) {
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!file) continue;
     const processed = await processImageForGemini(file);
+    if (files.length === 2) {
+      parts.push({ text: `=== IMAGE ${i + 1}: ${i === 0 ? 'PRE-EVENT BASELINE (T1)' : 'POST-EVENT OBSERVATION (T2)'} (${file.name}) ===` });
+    }
     parts.push({
-      inlineData: {
-        mimeType: processed.mimeType,
-        data: processed.data
-      }
+      inlineData: { mimeType: processed.mimeType, data: processed.data }
     });
   }
 
   const requestBody = {
-    contents: [
-      {
-        parts: parts
-      }
-    ],
-    generationConfig: {
-      temperature: 0.2,
-      responseMimeType: "application/json"
-    }
+    contents: [{ parts: parts }],
+    generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
   };
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody),
-    signal
-  });
+  const modelsToTry = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash"];
+  let response;
+  let lastErrorText = "Unknown API Error";
+  let lastStatus = 500;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new SatQueryError(`Gemini API Error: ${errorText}`, response.status);
+  for (const model of modelsToTry) {
+    try {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: signal ?? null
+      });
+
+      if (response.ok) {
+        break;
+      } else {
+        lastErrorText = await response.text();
+        lastStatus = response.status;
+        // Only fallback if the error is 404 (Not Found), 503 (Unavailable), or 429 (Rate Limit)
+        if (![404, 503, 429].includes(lastStatus)) {
+          break; 
+        }
+      }
+    } catch (err: any) {
+      // Handle network errors or aborts
+      if (err.name === 'AbortError') throw err;
+      lastErrorText = err.message || "Network Error";
+      lastStatus = 0;
+    }
+  }
+
+  if (!response || !response.ok) {
+    throw new SatQueryError(`Gemini API Error: ${lastErrorText}`, lastStatus);
   }
 
   const data = await response.json();
@@ -138,10 +172,10 @@ Only output the JSON object without any markdown wrappers.`
     throw new SatQueryError("Invalid response from Gemini", 500);
   }
   
-  // Clean up if it returned markdown
   jsonString = jsonString.replace(/```json/g, '').replace(/```/g, '').trim();
-  
   const parsedResponse = JSON.parse(jsonString) as AnalysisResponse;
+  
+  parsedResponse.model = "gemini-3.6-flash";
 
   // Add dummy execution trace for realism
   parsedResponse.execution_trace = {
@@ -163,6 +197,27 @@ Only output the JSON object without any markdown wrappers.`
   }
 
   return parsedResponse;
+}
+
+export async function generateChatTitle(query: string, apiKey: string): Promise<string> {
+  if (!apiKey || !query.trim()) return query.slice(0, 30);
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `Generate a very short, concise 3-4 word title for this chat based on the following user query. ONLY output the title, no quotes, no extra text. Query: "${query}"` }] }],
+        generationConfig: { temperature: 0.7 }
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.candidates && data.candidates[0].content.parts[0].text) {
+      return data.candidates[0].content.parts[0].text.replace(/["*]/g, '').trim();
+    }
+  } catch (e) {
+    console.warn("Failed to generate chat title", e);
+  }
+  return query.slice(0, 30);
 }
 
 export async function runOrchestration(

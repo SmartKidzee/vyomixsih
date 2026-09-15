@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * SatQuery AI design system — Soft Sky & Studio Light Earth aesthetic.
- * Clean powder-blue backdrop, white floating cards, deep navy accents, serif headlines.
+ * Earth Query Lens — Claude.ai Warm Aesthetic Design System.
+ * Clean warm parchment backgrounds, pure white cards, crisp charcoal typography, and terracotta accents.
  */
 
 @theme inline {
@@ -39,51 +39,53 @@
   --color-ring: var(--ring);
   --color-panel: var(--panel);
   --color-grid: var(--grid);
-  --font-display: "DM Sans", system-ui, sans-serif;
-  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-display: "Newsreader", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-serif: "Newsreader", Georgia, serif;
 }
 
 :root {
-  --radius: 0.875rem;
-  /* Light powder-blue / duck-egg sky blue backdrop */
-  --background: oklch(0.85 0.04 212);
-  --foreground: oklch(0.2 0.04 240);
+  --radius: 0.75rem;
   
-  /* Pristine white floating cards */
-  --card: #ffffff;
-  --card-foreground: oklch(0.2 0.04 240);
-  --panel: #ffffff;
-  --popover: #ffffff;
-  --popover-foreground: oklch(0.2 0.04 240);
+  /* Claude Warm Parchment / Oat background */
+  --background: #FAF9F5;
+  --foreground: #1F1E1B;
   
-  /* Deep Navy CTA primary buttons */
-  --primary: oklch(0.22 0.045 240);
-  --primary-foreground: #ffffff;
+  /* Pure white cards */
+  --card: #FFFFFF;
+  --card-foreground: #1F1E1B;
+  --panel: #FFFFFF;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F1E1B;
   
-  /* Soft ice-blue secondary pills */
-  --secondary: oklch(0.92 0.025 210);
-  --secondary-foreground: oklch(0.25 0.04 240);
+  /* Claude signature Terracotta */
+  --primary: #CC5A37;
+  --primary-foreground: #FFFFFF;
   
-  --muted: oklch(0.93 0.02 210);
-  --muted-foreground: oklch(0.45 0.035 230);
+  /* Warm secondary grays */
+  --secondary: #F2EFEA;
+  --secondary-foreground: #4B473F;
   
-  --accent: oklch(0.9 0.03 210);
-  --accent-foreground: oklch(0.2 0.04 240);
+  --muted: #F5F2EB;
+  --muted-foreground: #7D786F;
   
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: #ffffff;
+  --accent: #F2EFEA;
+  --accent-foreground: #1F1E1B;
   
-  --warning: oklch(0.72 0.16 75);
-  --warning-foreground: oklch(0.25 0.05 60);
+  --destructive: #D94636;
+  --destructive-foreground: #FFFFFF;
   
-  --success: oklch(0.55 0.16 160);
+  --warning: #B45309;
+  --warning-foreground: #FFFBEB;
   
-  --border: oklch(0.86 0.025 210);
-  --input: oklch(0.88 0.02 210);
-  --ring: oklch(0.28 0.045 240);
-  --grid: oklch(0.25 0.04 240 / 5%);
+  --success: #3D7E5D;
+  
+  /* Warm borders */
+  --border: #E5E0D8;
+  --input: #E5E0D8;
+  --ring: #CC5A37;
+  --grid: rgba(31, 30, 27, 0.04);
 }
 
 @layer base {

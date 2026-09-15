@@ -1,19 +1,24 @@
-import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Satellite, Send, Paperclip, X, Loader2, AlertCircle, ChevronDown,
-  ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3
+  ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3,
+  Menu, Map as MapIcon, MessageSquare
 } from "lucide-react";
 import { BackendSettings } from "@/components/BackendSettings";
-import { useAuth } from "@/lib/auth-context";
-import { runOrchestration } from "@/services/geminiService";
+import { MapSelector } from "@/components/MapSelector";
 import {
   humanizeError, formatConfidence, confidenceRatio,
   type AnalysisResponse, type BoundingBox
 } from "@/lib/satquery";
-import type { UploadedImage } from "@/components/UploadPanel";
+import localforage from "localforage";
+import ReactMarkdown from "react-markdown";
+import { generateChatTitle, runOrchestration } from "@/services/geminiService";
 
-
+export interface UploadedImage {
+  id: string;
+  file: File;
+  previewUrl: string | null;
+}
 
 interface ChatMessage {
   id: string;
@@ -24,8 +29,14 @@ interface ChatMessage {
   error?: string;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  updatedAt: number;
+}
+
 /* BBox canvas overlay */
-function BboxCanvas({ url, boxes }: { url: string; boxes: BoundingBox[] }) {
+function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; boxes: BoundingBox[]; label?: string; isLightbox?: boolean; onClick?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -45,16 +56,16 @@ function BboxCanvas({ url, boxes }: { url: string; boxes: BoundingBox[] }) {
         const ry = norm ? y1 * img.naturalHeight : y1;
         const rw = norm ? (x2 - x1) * img.naturalWidth : x2 - x1;
         const rh = norm ? (y2 - y1) * img.naturalHeight : y2 - y1;
-        const isWater = /water|lake|river|sea|ocean|pond|wetland/i.test(b.label ?? "");
-        ctx.strokeStyle = isWater ? "#06b6d4" : "#38bdf8";
+        const isChange = /change|new|destroyed|flood|loss/i.test(b.label ?? "");
+        ctx.strokeStyle = isChange ? "#CC5A37" : "#3D7E5D";
         ctx.lineWidth = Math.max(2, img.naturalWidth * 0.003);
         ctx.strokeRect(rx, ry, rw, rh);
         if (b.label) {
-          ctx.fillStyle = isWater ? "rgba(6,182,212,0.85)" : "rgba(56,189,248,0.85)";
-          const fontSize = Math.max(11, img.naturalWidth * 0.016);
+          ctx.fillStyle = isChange ? "rgba(204,90,55,0.9)" : "rgba(61,126,93,0.9)";
+          const fontSize = Math.max(12, img.naturalWidth * 0.018);
           ctx.font = `bold ${fontSize}px system-ui`;
           const tw = ctx.measureText(b.label).width;
-          ctx.fillRect(rx, ry - fontSize - 4, tw + 12, fontSize + 8);
+          ctx.fillRect(rx, ry - fontSize - 6, tw + 12, fontSize + 10);
           ctx.fillStyle = "#fff";
           ctx.fillText(b.label, rx + 6, ry - 4);
         }
@@ -62,47 +73,45 @@ function BboxCanvas({ url, boxes }: { url: string; boxes: BoundingBox[] }) {
     };
   }, [url, boxes]);
   return (
-    <canvas ref={canvasRef} className="w-full rounded-xl border border-slate-200 max-h-72 object-contain" />
+    <div className={`relative group ${onClick ? "cursor-zoom-in" : ""}`} onClick={onClick}>
+      {label && <div className="absolute top-2 left-2 z-10 bg-[#1F1E1B]/80 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm">{label}</div>}
+      <canvas ref={canvasRef} className={`w-full rounded-2xl border border-[#E5E0D8] object-contain shadow-sm bg-white ${isLightbox ? "max-h-[85vh] max-w-[85vw]" : "max-h-80"}`} />
+    </div>
   );
 }
 
 /* Assistant bubble */
-function AssistantBubble({ msg }: { msg: ChatMessage }) {
+function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick: (url: string, boxes: BoundingBox[], label?: string) => void }) {
   const r = msg.result!;
   const [traceOpen, setTraceOpen] = useState(false);
   const conf = formatConfidence(r.confidence);
   const ratio = confidenceRatio(r.confidence);
 
   return (
-    <div className="flex gap-3 items-start">
-      <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-sky-700 text-white mt-1">
+    <div className="flex gap-4 items-start mb-8">
+      <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-[#CC5A37] text-white mt-1">
         <Satellite className="size-4" />
       </div>
       <div className="flex-1 min-w-0 space-y-3">
         {/* Answer card */}
-        <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5">
+        <div className="rounded-2xl bg-white border border-[#E5E0D8] shadow-sm p-5">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Sparkles className="size-4 text-sky-600 shrink-0" />
-            <span className="text-xs font-bold tracking-widest uppercase text-slate-400">
+            <Sparkles className="size-4 text-[#CC5A37] shrink-0" />
+            <span className="text-xs font-bold tracking-widest uppercase text-[#7D786F]">
               {r.task ?? "Satellite Analysis"}
             </span>
-            {(r.model ?? r.execution_trace?.model) && (
-              <span className="ml-auto text-xs font-mono font-semibold text-slate-400 shrink-0">
-                {r.model ?? r.execution_trace?.model}
-              </span>
-            )}
           </div>
-          <p className="text-slate-800 text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
-            {r.answer ?? r.caption ?? "No analysis returned."}
-          </p>
+          <div className="text-[#1F1E1B] text-sm sm:text-[15px] leading-relaxed font-sans prose-sm max-w-none [&>strong]:font-extrabold [&>strong]:text-[#CC5A37]">
+            <ReactMarkdown>{r.answer ?? r.caption ?? "No analysis returned."}</ReactMarkdown>
+          </div>
           {conf && ratio !== null && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="mt-4 pt-4 border-t border-[#F2EFEA]">
               <div className="flex justify-between mb-1.5">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Confidence</span>
-                <span className="text-xs font-bold font-mono text-slate-700">{conf}</span>
+                <span className="text-xs font-semibold text-[#7D786F] uppercase tracking-wider">Confidence</span>
+                <span className="text-xs font-bold font-mono text-[#1F1E1B]">{conf}</span>
               </div>
-              <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                <div className="h-full rounded-full bg-sky-600 transition-all duration-700"
+              <div className="h-2 rounded-full bg-[#F2EFEA] overflow-hidden">
+                <div className="h-full rounded-full bg-[#CC5A37] transition-all duration-700"
                   style={{ width: `${ratio * 100}%` }} />
               </div>
             </div>
@@ -111,11 +120,11 @@ function AssistantBubble({ msg }: { msg: ChatMessage }) {
 
         {/* Evidence chips */}
         {r.evidence && r.evidence.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 mt-2">
             {(r.evidence as any[]).map((e: any, i: number) => (
-              <div key={i} className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-800">
-                <Check className="size-3 text-emerald-500 shrink-0" />
-                <span className="truncate max-w-[200px]">
+              <div key={i} className="flex items-center gap-1.5 rounded-full bg-[#3D7E5D]/10 border border-[#3D7E5D]/20 px-3 py-1 text-xs font-semibold text-[#3D7E5D]">
+                <Check className="size-3.5 shrink-0" />
+                <span className="truncate max-w-[250px]">
                   {typeof e === "string" ? e : (e.label ?? e.type ?? "Evidence")}
                 </span>
               </div>
@@ -125,35 +134,60 @@ function AssistantBubble({ msg }: { msg: ChatMessage }) {
 
         {/* Change detection */}
         {r.change && (
-          <div className={`flex items-start gap-3 rounded-xl border p-4 text-sm font-semibold ${r.change.change_detected ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+          <div className={`flex items-start gap-3 rounded-xl border p-4 text-sm font-semibold ${r.change.change_detected ? "border-[#CC5A37]/30 bg-[#CC5A37]/10 text-[#B45309]" : "border-[#3D7E5D]/30 bg-[#3D7E5D]/10 text-[#3D7E5D]"}`}>
             <Layers className="size-4 shrink-0 mt-0.5" />
             <div>
-              <p>{r.change.change_detected ? "⚠ Change Detected" : "✓ No Significant Change"}</p>
-              {r.change.description && <p className="font-normal text-xs mt-1 opacity-80">{r.change.description}</p>}
+              <p className="text-base">{r.change.change_detected ? "⚠ Significant Change Detected" : "✓ No Significant Change"}</p>
+              {r.change.description && <p className="font-normal text-sm mt-1.5 opacity-90 text-[#1F1E1B]">{r.change.description}</p>}
               {typeof r.change.changed_area_percent === "number" && (
-                <p className="font-normal text-xs opacity-70 mt-0.5">Changed area: ~{r.change.changed_area_percent.toFixed(1)}%</p>
+                <p className="font-mono text-xs opacity-80 mt-2 font-bold">Estimated Affected Area: {r.change.changed_area_percent.toFixed(1)}%</p>
               )}
             </div>
           </div>
         )}
 
         {/* Image overlays */}
-        {msg.images && msg.images.length > 0 && r.grounding && r.grounding.length > 0 && (
+        {msg.images && msg.images.length > 0 && (
           <div className={`grid gap-2 ${msg.images.length > 1 ? "sm:grid-cols-2" : "grid-cols-1"}`}>
             {msg.images.map((img, idx) => (
               <div key={img.id}>
                 {idx === 0 && img.previewUrl ? (
-                  <BboxCanvas url={img.previewUrl} boxes={r.grounding!} />
+                  <div className="relative">
+                    {r.grounding && r.grounding.length > 0 ? (
+                      <BboxCanvas url={img.previewUrl} boxes={r.grounding} label="T1: Pre-Event" onClick={() => onImageClick(img.previewUrl!, r.grounding!, "T1: Pre-Event")} />
+                    ) : (
+                      <>
+                        <div className="absolute top-2 left-2 z-10 bg-[#1F1E1B]/80 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm">T1: Pre-Event</div>
+                        <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-[#E5E0D8] max-h-80 object-contain bg-white cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [], "T1: Pre-Event")} />
+                      </>
+                    )}
+                  </div>
+                ) : idx === 1 && img.previewUrl ? (
+                  <div className="relative">
+                    {r.grounding && r.grounding.length > 0 ? (
+                      <BboxCanvas url={img.previewUrl} boxes={r.grounding} label="T2: Post-Event" onClick={() => onImageClick(img.previewUrl!, r.grounding!, "T2: Post-Event")} />
+                    ) : (
+                      <>
+                        <div className="absolute top-2 left-2 z-10 bg-[#1F1E1B]/80 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm">T2: Post-Event</div>
+                        <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-[#E5E0D8] max-h-80 object-contain bg-white cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [], "T2: Post-Event")} />
+                      </>
+                    )}
+                  </div>
                 ) : img.previewUrl ? (
-                  <img src={img.previewUrl} alt={img.file.name}
-                    className="w-full rounded-xl border border-slate-200 max-h-72 object-contain" />
+                  <div className="relative">
+                    {r.grounding && r.grounding.length > 0 ? (
+                      <BboxCanvas url={img.previewUrl} boxes={r.grounding} onClick={() => onImageClick(img.previewUrl!, r.grounding!)} />
+                    ) : (
+                      <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-[#E5E0D8] max-h-80 object-contain bg-white cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [])} />
+                    )}
+                  </div>
                 ) : (
-                  <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-400">
+                  <div className="flex items-center gap-2 rounded-xl border border-[#E5E0D8] bg-[#FAF9F5] px-3 py-3 text-xs text-[#7D786F]">
                     <FileImage className="size-4 shrink-0" />
                     <span className="font-mono truncate">{img.file.name}</span>
                   </div>
                 )}
-                <p className="mt-1 text-xs text-slate-400 font-mono truncate">{img.file.name}</p>
+                <p className="mt-1 text-xs text-[#7D786F] font-mono truncate">{img.file.name}</p>
               </div>
             ))}
           </div>
@@ -170,7 +204,6 @@ function AssistantBubble({ msg }: { msg: ChatMessage }) {
             {traceOpen && (
               <div className="rounded-xl bg-slate-900 text-slate-200 p-4 text-xs font-mono space-y-1.5">
                 <p><span className="text-slate-500">task:</span> {r.execution_trace.detected_task}</p>
-                <p><span className="text-slate-500">model:</span> {r.execution_trace.model}</p>
                 <div className="mt-2 space-y-1">
                   {r.execution_trace.steps.map((s, i) => (
                     <div key={i} className="flex items-center gap-2">
@@ -189,24 +222,124 @@ function AssistantBubble({ msg }: { msg: ChatMessage }) {
   );
 }
 
-/* Main component */
 export default function Index() {
-  const { isLoggedIn } = useAuth();
-  const navigate = useNavigate();
-
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string>("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingImages, setPendingImages] = useState<UploadedImage[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [progressText, setProgressText] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mode, setMode] = useState<"chat" | "map">("chat");
+  const [isDragging, setIsDragging] = useState(false);
+  const [lightboxData, setLightboxData] = useState<{ url: string; boxes: BoundingBox[]; label?: string } | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Load sessions and handle migration on mount
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const savedSessions = await localforage.getItem<ChatSession[]>("satquery.sessions");
+        if (savedSessions && savedSessions.length > 0) {
+          setSessions(savedSessions);
+          // Load the most recent session
+          const latest = [...savedSessions].sort((a,b) => b.updatedAt - a.updatedAt)[0];
+          setCurrentSessionId(latest.id);
+        } else {
+          // Check for legacy migration
+          const legacy = await localforage.getItem<ChatMessage[]>("satquery.history");
+          if (legacy && legacy.length > 0) {
+            const legacyId = `session-${Date.now()}`;
+            const legacySession = { id: legacyId, title: "Previous Session", updatedAt: Date.now() };
+            setSessions([legacySession]);
+            setCurrentSessionId(legacyId);
+            await localforage.setItem("satquery.sessions", [legacySession]);
+            
+            // Re-create object URLs for legacy files
+            const restored = legacy.map(m => ({
+              ...m,
+              images: m.images ? m.images.map(img => ({
+                ...img,
+                previewUrl: img.file ? URL.createObjectURL(img.file as File) : null
+              })) : undefined
+            }));
+            await localforage.setItem(`satquery.session_${legacyId}`, legacy); // save stripped version
+            setMessages(restored);
+            await localforage.removeItem("satquery.history"); // cleanup
+          } else {
+            // Start fresh
+            setCurrentSessionId(`session-${Date.now()}`);
+          }
+        }
+      } catch(e) { console.warn("Failed to init", e); }
+    };
+    init();
+  }, []);
+
+  // Load specific session messages when currentSessionId changes
+  useEffect(() => {
+    if (!currentSessionId) return;
+    localforage.getItem<ChatMessage[]>(`satquery.session_${currentSessionId}`)
+      .then((saved) => {
+        if (saved) {
+           const restored = saved.map(m => ({
+            ...m,
+            images: m.images ? m.images.map(img => ({
+              ...img,
+              previewUrl: img.file ? URL.createObjectURL(img.file as File) : null
+            })) : undefined
+          }));
+          setMessages(restored);
+        } else {
+          setMessages([]); // New session
+        }
+      });
+  }, [currentSessionId]);
+
+  // Save current session messages on change
+  useEffect(() => {
+    if (!currentSessionId) return;
+    
+    // Strip Object URLs before saving
+    const serialized = messages.map(m => ({
+      ...m,
+      images: m.images ? m.images.map(img => ({ ...img, previewUrl: null })) : undefined
+    }));
+    localforage.setItem(`satquery.session_${currentSessionId}`, serialized)
+      .catch(e => console.warn("Storage error", e));
+  }, [messages, currentSessionId]);
+
+  const createNewChat = () => {
+    setCurrentSessionId(`session-${Date.now()}`);
+    setMessages([]);
+    setPendingImages([]);
+    setQuery("");
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
+  const deleteSession = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = sessions.filter(s => s.id !== id);
+    setSessions(updated);
+    await localforage.setItem("satquery.sessions", updated);
+    await localforage.removeItem(`satquery.session_${id}`);
+    
+    if (currentSessionId === id) {
+      if (updated.length > 0) {
+        setCurrentSessionId(updated[0].id);
+      } else {
+        createNewChat();
+      }
+    }
+  };
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, busy, mode]);
 
   const growTextarea = useCallback(() => {
     const el = textareaRef.current;
@@ -233,24 +366,113 @@ export default function Index() {
     setPendingImages((p) => p.filter((i) => i.id !== id));
   };
 
+  const getContextImages = () => {
+    if (pendingImages.length > 0) return pendingImages;
+    // Look backward in history for the last uploaded images
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].images && messages[i].images!.length > 0) {
+        // Reconstruct basic structure (preview might be missing due to serialization)
+        return messages[i].images!;
+      }
+    }
+    return [];
+  };
+
+  const handleMapSelect = (bounds: [[number, number], [number, number]], imageFile?: File) => {
+    const q = `Analyze the region at coordinates [${bounds[0][0].toFixed(4)}, ${bounds[0][1].toFixed(4)}] to [${bounds[1][0].toFixed(4)}, ${bounds[1][1].toFixed(4)}].`;
+    setQuery(q);
+    
+    if (imageFile) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(imageFile);
+        addImages(dt.files);
+      } catch (e) {
+        // Fallback for environments lacking DataTransfer
+        const id = `map-${Date.now()}`;
+        setPendingImages(p => [...p, { id, file: imageFile, previewUrl: URL.createObjectURL(imageFile) }]);
+      }
+    }
+    
+    setMode("chat");
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (mode === "chat") setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+  
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (mode === "chat" && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addImages(e.dataTransfer.files);
+    }
+  };
+
   const submit = async () => {
     if (busy) return;
-    if (!isLoggedIn) { navigate("/login"); return; }
-    if (pendingImages.length === 0) {
-      setMessages((p) => [...p, { id: Math.random().toString(), role: "assistant", error: "Please attach at least one image before sending." }]);
-      return;
-    }
-    const imgs = [...pendingImages];
-    const q = query.trim() || "Analyze this imagery and describe what you see.";
-    setMessages((p) => [...p, { id: Math.random().toString(), role: "user", text: query.trim() || undefined, images: imgs }]);
+    
+    const contextImages = getContextImages();
+    const imgs = [...pendingImages]; 
+    const isNewImage = imgs.length > 0;
+    
+    const msgToAdd: ChatMessage = { id: Math.random().toString(), role: "user" };
+    if (query.trim()) msgToAdd.text = query.trim();
+    if (isNewImage) msgToAdd.images = imgs;
+    
+    setMessages((p) => [...p, msgToAdd]);
     setQuery("");
     setPendingImages([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
     setBusy(true);
     setProgressText("Initializing...");
+
+    // Session logic: Update timestamp and title only when actually submitting
+    const apiKey = localStorage.getItem("satquery.apikey");
+    let needsTitle = false;
+    
+    setSessions(prev => {
+      const existing = prev.find(s => s.id === currentSessionId);
+      if (!existing) {
+         needsTitle = true;
+         const initialSession = { id: currentSessionId, title: "New Chat...", updatedAt: Date.now() };
+         const updated = [initialSession, ...prev];
+         localforage.setItem("satquery.sessions", updated);
+         return updated;
+      } else {
+         const updated = prev.map(s => s.id === currentSessionId ? { ...s, updatedAt: Date.now() } : s);
+         updated.sort((a,b) => b.updatedAt - a.updatedAt);
+         localforage.setItem("satquery.sessions", updated);
+         return updated;
+      }
+    });
+
+    if (apiKey && needsTitle) {
+       generateChatTitle(query.trim() || "Analyze image", apiKey).then(t => {
+          setSessions(prev => {
+            const updated = prev.map(s => s.id === currentSessionId ? { ...s, title: t } : s);
+            localforage.setItem("satquery.sessions", updated);
+            return updated;
+          });
+       });
+    }
+
     try {
-      const res = await runOrchestration(q, imgs.map((i) => i.file), (m) => setProgressText(m));
-      setMessages((p) => [...p, { id: Math.random().toString(), role: "assistant", result: res, images: imgs }]);
+      // Use either newly attached images, or carry forward the context ones
+      const filesToAnalyze = isNewImage ? imgs.map((i) => i.file) : contextImages.map(i => i.file);
+      
+      const res = await runOrchestration(query.trim() || "Analyze this context.", filesToAnalyze, (m) => setProgressText(m));
+      
+      const resMsg: ChatMessage = { id: Math.random().toString(), role: "assistant", result: res };
+      resMsg.images = isNewImage ? imgs : contextImages;
+      setMessages((p) => [...p, resMsg]);
     } catch (err) {
       setMessages((p) => [...p, { id: Math.random().toString(), role: "assistant", error: humanizeError(err) }]);
     } finally {
@@ -267,184 +489,268 @@ export default function Index() {
   ];
 
   return (
-    <div className="flex flex-col bg-slate-50 h-screen overflow-hidden">
-      {/* Navbar */}
-      <div className="shrink-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 py-3 gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-700">
-            <Satellite className="size-4 text-white" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-900 leading-none truncate">Earth Query Lens</p>
-            <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">by VYOMIX</p>
+    <div 
+      className="flex h-screen bg-[#FDFBF7] font-sans antialiased overflow-hidden"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Lightbox Overlay */}
+      {lightboxData && (
+        <div className="fixed inset-0 z-[99999] bg-black/90 flex flex-col items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setLightboxData(null)}>
+          <button className="absolute top-6 right-6 text-white p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors backdrop-blur-md" onClick={(e) => { e.stopPropagation(); setLightboxData(null); }}>
+            <X className="size-6" />
+          </button>
+          <div className="w-full h-full flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <BboxCanvas url={lightboxData.url} boxes={lightboxData.boxes} label={lightboxData.label} isLightbox={true} />
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {messages.length > 0 && (
-            <button onClick={() => { setMessages([]); setPendingImages([]); }}
-              className="text-xs font-semibold text-slate-400 hover:text-slate-700 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-              New Chat
-            </button>
+      )}
+
+      {isDragging && (
+        <div className="fixed inset-0 z-[9999] bg-[#CC5A37]/5 backdrop-blur-[2px] border-4 border-dashed border-[#CC5A37] flex items-center justify-center transition-all m-4 rounded-3xl">
+          <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200">
+            <div className="bg-[#F2EFEA] p-4 rounded-full">
+              <FileImage className="size-8 text-[#CC5A37]" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-[#1F1E1B]">Drop images to upload</h3>
+              <p className="text-sm text-[#7D786F] mt-1">Supports TIFF, JPG, and PNG files</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar Mobile Overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/20 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+      
+      {/* Sidebar */}
+      <div className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-64 border-r border-[#E5E0D8] bg-[#FAF9F5] transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="p-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#CC5A37]">
+              <Satellite className="size-4 text-white" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-[#1F1E1B] font-serif tracking-tight">Earth Query Lens</h1>
+            </div>
+          </div>
+          <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
+            <X className="size-5 text-[#1F1E1B]" />
+          </button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          <div className="text-[10px] font-bold text-[#7D786F] uppercase tracking-widest px-2 py-2">Chats</div>
+          {sessions.map(s => (
+            <div key={s.id} 
+              onClick={() => { setCurrentSessionId(s.id); if (window.innerWidth < 768) setSidebarOpen(false); }}
+              className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group cursor-pointer transition-colors ${currentSessionId === s.id ? 'bg-white border border-[#E5E0D8] shadow-sm text-[#1F1E1B]' : 'text-[#7D786F] hover:text-[#1F1E1B] hover:bg-white/60'}`}
+            >
+              <div className="flex items-center gap-2 truncate">
+                <MessageSquare className="size-3.5 shrink-0" /> 
+                <span className="truncate">{s.title}</span>
+              </div>
+              <button 
+                onClick={(e) => deleteSession(s.id, e)}
+                className="opacity-0 group-hover:opacity-100 p-1 text-[#7D786F] hover:text-[#D94636] transition-all rounded-md hover:bg-[#D94636]/10"
+                title="Delete Chat"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          ))}
+          {sessions.length === 0 && (
+            <div className="px-3 py-4 text-xs text-center text-[#7D786F]">No previous chats.</div>
           )}
-          <BackendSettings />
+        </div>
+        
+        <div className="p-4 border-t border-[#E5E0D8] space-y-2">
+          <button onClick={createNewChat}
+            className="w-full flex items-center justify-center gap-2 bg-white border border-[#E5E0D8] text-[#1F1E1B] hover:bg-[#F2EFEA] rounded-xl px-4 py-2 text-sm font-semibold transition-colors shadow-sm">
+            <Sparkles className="size-4 text-[#CC5A37]" /> New Chat
+          </button>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto">
-        {messages.length === 0 && !busy ? (
-          <div className="flex flex-col items-center justify-center h-full px-4 py-12 text-center">
-            <div className="flex size-16 items-center justify-center rounded-2xl bg-sky-700 mb-5 shadow-lg">
-              <Satellite className="size-8 text-white" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Earth Query Lens</h1>
-            <p className="text-slate-500 max-w-sm text-sm mb-8">
-              Attach satellite imagery below, then ask anything. Supports GeoTIFF, SAR, optical, and bi-temporal pairs.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full">
-              {SUGGESTIONS.map((s) => (
-                <button key={s.q} onClick={() => { setQuery(s.q); textareaRef.current?.focus(); }}
-                  className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-left text-sm font-medium text-slate-700 shadow-sm hover:border-sky-400 hover:bg-sky-50 transition-all">
-                  <span className="text-lg">{s.icon}</span>
-                  {s.q}
-                </button>
-              ))}
+      <div className="flex flex-col flex-1 min-w-0 h-full relative">
+        {/* Navbar */}
+        <div className="shrink-0 z-20 flex items-center justify-between border-b border-[#E5E0D8] bg-[#FAF9F5] px-4 py-3 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button className="md:hidden" onClick={() => setSidebarOpen(true)}>
+              <Menu className="size-5 text-[#1F1E1B]" />
+            </button>
+            <div className="flex bg-[#E5E0D8] p-1 rounded-xl">
+              <button 
+                onClick={() => setMode("chat")}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mode === "chat" ? 'bg-white shadow-sm text-[#1F1E1B]' : 'text-[#7D786F] hover:text-[#1F1E1B]'}`}>
+                <MessageSquare className="size-3.5" /> Chat
+              </button>
+              <button 
+                onClick={() => setMode("map")}
+                className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${mode === "map" ? 'bg-white shadow-sm text-[#1F1E1B]' : 'text-[#7D786F] hover:text-[#1F1E1B]'}`}>
+                <MapIcon className="size-3.5" /> Map
+              </button>
             </div>
           </div>
-        ) : (
-          <div className="mx-auto max-w-3xl w-full px-4 py-8 space-y-8">
-            {messages.map((msg) => {
-              if (msg.role === "user") {
-                return (
-                  <div key={msg.id} className="flex gap-3 items-start justify-end">
-                    <div className="max-w-[85%] space-y-2 min-w-0">
-                      {msg.images && msg.images.length > 0 && (
-                        <div className={`grid gap-2 ${msg.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                          {msg.images.map((img) => img.previewUrl ? (
-                            <img key={img.id} src={img.previewUrl} alt={img.file.name}
-                              className="rounded-xl border border-slate-200 max-h-48 w-full object-cover" />
-                          ) : (
-                            <div key={img.id} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-500">
-                              <FileImage className="size-4 shrink-0" />
-                              <span className="truncate font-mono">{img.file.name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {msg.text && (
-                        <div className="rounded-2xl bg-slate-900 text-white px-4 py-3 text-sm leading-relaxed">
-                          {msg.text}
-                        </div>
-                      )}
-                    </div>
-                    <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-slate-200 mt-1">
-                      <User className="size-4 text-slate-600" />
-                    </div>
-                  </div>
-                );
-              }
-              if (msg.error) {
-                return (
-                  <div key={msg.id} className="flex gap-3 items-start">
-                    <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-rose-100 mt-1">
-                      <AlertCircle className="size-4 text-rose-600" />
-                    </div>
-                    <div className="rounded-2xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-800">
-                      {msg.error}
-                    </div>
-                  </div>
-                );
-              }
-              if (msg.result) {
-                return <AssistantBubble key={msg.id} msg={msg} />;
-              }
-              return null;
-            })}
+          <div className="flex items-center gap-2 shrink-0">
+            <BackendSettings />
+          </div>
+        </div>
 
-            {busy && (
-              <div className="flex gap-3 items-start">
-                <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-sky-700 text-white mt-1">
-                  <Bot className="size-4" />
-                </div>
-                <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4 min-w-0 flex-1">
-                  <div className="flex items-center gap-3">
-                    <Loader2 className="size-4 animate-spin text-sky-600 shrink-0" />
-                    <p className="text-sm font-semibold text-slate-600">{progressText || "Processing..."}</p>
-                  </div>
-                  <div className="flex gap-1 mt-3">
-                    {["Pre-event Extraction", "Post-event Extraction", "Evidence Fusion"].map((step, i) => (
-                      <div key={i} className="flex-1 space-y-1">
-                        <div className="h-1 rounded-full bg-sky-100 overflow-hidden">
-                          <div className="h-full bg-sky-500 animate-pulse rounded-full" style={{ animationDelay: `${i * 0.35}s` }} />
-                        </div>
-                        <p className="text-[9px] text-slate-400 font-mono text-center leading-none">{step}</p>
-                      </div>
+        {mode === "map" ? (
+          <div className="flex-1 p-4 relative z-0">
+            <MapSelector onSelectBounds={handleMapSelect} />
+          </div>
+        ) : (
+          <>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto">
+              {messages.length === 0 && !busy ? (
+                <div className="flex flex-col items-center justify-center h-full px-4 py-12 text-center max-w-2xl mx-auto">
+                  <h1 className="text-3xl sm:text-4xl font-serif text-[#1F1E1B] mb-4">Good morning.</h1>
+                  <p className="text-[#7D786F] text-lg mb-8 max-w-md mx-auto">
+                    Attach satellite imagery (GeoTIFF, SAR, optical) to begin analysis. Future queries will remember your images.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                    {SUGGESTIONS.map((s) => (
+                      <button key={s.q} onClick={() => { setQuery(s.q); textareaRef.current?.focus(); }}
+                        className="flex items-center gap-3 rounded-2xl border border-[#E5E0D8] bg-white p-4 text-left text-sm font-medium text-[#1F1E1B] shadow-sm hover:border-[#CC5A37] hover:bg-[#FAF9F5] transition-all">
+                        <span className="text-lg">{s.icon}</span>
+                        {s.q}
+                      </button>
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-        )}
-      </div>
+              ) : (
+                <div className="mx-auto max-w-3xl w-full px-4 py-8 space-y-8">
+                  {messages.map((msg) => {
+                    if (msg.role === "user") {
+                      return (
+                        <div key={msg.id} className="flex gap-4 items-start justify-end">
+                          <div className="max-w-[85%] space-y-3 min-w-0">
+                            {msg.images && msg.images.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mb-2 justify-end">
+                                {msg.images.filter(Boolean).map((img) => img.previewUrl ? (
+                                  <img key={img.id} src={img.previewUrl} alt={img.file.name}
+                                    className="rounded-lg border border-[#E5E0D8] max-h-16 w-auto object-cover shadow-sm" />
+                                ) : (
+                                  <div key={img.id} className="flex items-center gap-1.5 rounded-lg border border-[#E5E0D8] bg-white px-2 py-1.5 text-xs text-[#7D786F] shadow-sm">
+                                    <FileImage className="size-3.5 shrink-0" />
+                                    <span className="truncate font-mono max-w-[100px]">{img.file.name}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {msg.text && (
+                              <div className="rounded-2xl bg-[#F2EFEA] text-[#1F1E1B] px-4 py-3 text-sm leading-relaxed shadow-sm">
+                                {msg.text}
+                              </div>
+                            )}
+                          </div>
+                          <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-[#E5E0D8] mt-1">
+                            <User className="size-4 text-[#4B473F]" />
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (msg.error) {
+                      return (
+                        <div key={msg.id} className="flex gap-4 items-start mb-8">
+                          <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-[#D94636]/10 mt-1">
+                            <AlertCircle className="size-4 text-[#D94636]" />
+                          </div>
+                          <div className="rounded-2xl bg-[#D94636]/5 border border-[#D94636]/20 px-5 py-4 text-sm text-[#D94636] font-semibold">
+                            {msg.error}
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (msg.result) {
+                      return <AssistantBubble key={msg.id} msg={msg} onImageClick={(url, boxes, label) => setLightboxData({ url, boxes, label })} />;
+                    }
+                    return null;
+                  })}
 
-      {/* Sticky input bar */}
-      <div className="shrink-0 border-t border-slate-200 bg-white px-4 sm:px-6 py-4 z-20">
-        <div className="mx-auto max-w-3xl w-full space-y-2.5">
-          {pendingImages.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              {pendingImages.map((img, idx) => (
-                <div key={img.id} className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 pl-2 pr-1 py-0.5 text-xs font-semibold text-slate-700 shadow-sm">
-                  {img.previewUrl ? (
-                    <img src={img.previewUrl} alt="" className="size-5 rounded-full object-cover" />
-                  ) : (
-                    <FileImage className="size-4 text-slate-400" />
+                  {busy && (
+                    <div className="flex gap-4 items-start mb-8">
+                      <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-[#CC5A37] text-white mt-1">
+                        <Bot className="size-4" />
+                      </div>
+                      <div className="rounded-2xl bg-white border border-[#E5E0D8] shadow-sm px-6 py-5 min-w-0 flex-1">
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="size-4 animate-spin text-[#CC5A37] shrink-0" />
+                          <p className="text-[15px] font-bold text-[#1F1E1B]">{progressText || "Processing..."}</p>
+                        </div>
+                      </div>
+                    </div>
                   )}
-                  <span className="max-w-[100px] truncate">{img.file.name}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700 font-bold ml-0.5">
-                    {pendingImages.length > 1 ? (idx === 0 ? "T1" : "T2") : "IMG"}
-                  </span>
-                  <button onClick={() => removeImage(img.id)}
-                    className="rounded-full p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-0.5">
-                    <X className="size-3" />
-                  </button>
+                  <div ref={bottomRef} />
                 </div>
-              ))}
-              {pendingImages.length === 2 && (
-                <span className="flex items-center gap-1 text-xs text-sky-600 font-semibold">
-                  <Layers className="size-3.5" /> Bi-temporal — fusion enabled
-                </span>
               )}
             </div>
-          )}
 
-          <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white px-3 py-2 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/20 transition-all shadow-sm">
-            <button onClick={() => fileInputRef.current?.click()} disabled={pendingImages.length >= 2}
-              title="Attach imagery (max 2 for bi-temporal)"
-              className="shrink-0 flex size-8 items-center justify-center rounded-xl text-slate-400 hover:text-sky-600 hover:bg-sky-50 disabled:opacity-30 transition-colors mb-0.5">
-              <Paperclip className="size-5" />
-            </button>
-            <input ref={fileInputRef} type="file" multiple
-              accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.jp2,.img" className="hidden"
-              onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
-            <textarea ref={textareaRef} value={query}
-              onChange={(e) => { setQuery(e.target.value); growTextarea(); }}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }}
-              placeholder={pendingImages.length === 0 ? "Attach imagery first, then ask…" : "Ask about this imagery… (Enter to send)"}
-              rows={1}
-              className="flex-1 resize-none bg-transparent text-sm text-slate-900 placeholder:text-slate-400 outline-none py-1 leading-relaxed min-h-[36px] max-h-[200px]"
-            />
-            <button onClick={() => void submit()} disabled={busy || pendingImages.length === 0}
-              className="shrink-0 flex size-8 items-center justify-center rounded-xl bg-sky-700 text-white hover:bg-sky-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all mb-0.5 shadow-sm">
-              {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-            </button>
-          </div>
+            {/* Sticky input bar */}
+            <div className="shrink-0 bg-transparent px-4 sm:px-6 pb-6 pt-2 z-20">
+              <div className="mx-auto max-w-3xl w-full space-y-2.5">
+                {pendingImages.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    {pendingImages.map((img, idx) => (
+                      <div key={img.id} className="flex items-center gap-1.5 rounded-full border border-[#E5E0D8] bg-white pl-2 pr-1 py-1 text-xs font-semibold text-[#1F1E1B] shadow-sm">
+                        {img.previewUrl ? (
+                          <img src={img.previewUrl} alt="" className="size-5 rounded-full object-cover" />
+                        ) : (
+                          <FileImage className="size-4 text-[#7D786F]" />
+                        )}
+                        <span className="max-w-[120px] truncate">{img.file.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F2EFEA] text-[#1F1E1B] font-bold ml-1">
+                          {pendingImages.length > 1 ? (idx === 0 ? "T1: Pre-event" : "T2: Post-event") : "IMG"}
+                        </span>
+                        <button onClick={() => removeImage(img.id)}
+                          className="rounded-full p-1 text-[#7D786F] hover:text-[#D94636] hover:bg-[#D94636]/10 transition-colors ml-1">
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {pendingImages.length === 2 && (
+                      <span className="flex items-center gap-1 text-xs text-[#3D7E5D] font-semibold ml-2">
+                        <Layers className="size-3.5" /> Bi-temporal mode
+                      </span>
+                    )}
+                  </div>
+                )}
 
-          <p className="text-center text-[10px] text-slate-400">
-            Supports GeoTIFF · TIFF · PNG · JPEG · BigEarth · JP2 · SAR · Bi-temporal change detection
-          </p>
-        </div>
+                <div className="flex items-end gap-2 rounded-3xl border border-[#E5E0D8] bg-white px-4 py-3 shadow-[0_4px_20px_-8px_rgba(31,30,27,0.08)] focus-within:border-[#CC5A37] focus-within:ring-2 focus-within:ring-[#CC5A37]/20 transition-all">
+                  <button onClick={() => fileInputRef.current?.click()} disabled={pendingImages.length >= 2}
+                    title="Attach imagery (max 2 for bi-temporal)"
+                    className="shrink-0 flex size-9 items-center justify-center rounded-full text-[#7D786F] hover:text-[#CC5A37] hover:bg-[#FAF9F5] disabled:opacity-30 transition-colors mb-0.5">
+                    <Paperclip className="size-5" />
+                  </button>
+                  <input ref={fileInputRef} type="file" multiple
+                    accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.jp2,.img" className="hidden"
+                    onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
+                  <textarea ref={textareaRef} value={query}
+                    onChange={(e) => { setQuery(e.target.value); growTextarea(); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (query.trim() || pendingImages.length > 0) void submit(); } }}
+                    placeholder={(pendingImages.length === 0 && messages.length === 0) ? "Ask about your satellite imagery..." : "Ask follow-up questions or drag to map..."}
+                    rows={1}
+                    className="flex-1 resize-none bg-transparent text-[15px] text-[#1F1E1B] placeholder:text-[#7D786F] outline-none py-1.5 leading-relaxed min-h-[36px] max-h-[200px]"
+                  />
+                  <button onClick={() => void submit()} disabled={busy || (!query.trim() && pendingImages.length === 0)}
+                    className="shrink-0 flex size-9 items-center justify-center rounded-full bg-[#CC5A37] text-white hover:bg-[#B54A2B] disabled:opacity-40 disabled:cursor-not-allowed transition-all mb-0.5 shadow-sm">
+                    {busy ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+                  </button>
+                </div>
+
+                <p className="text-center text-xs text-[#7D786F]">
+                  Supports GeoTIFF · TIFF · PNG · JPEG · BigEarth · JP2 · SAR
+                </p>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
