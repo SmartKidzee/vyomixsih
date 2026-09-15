@@ -105,8 +105,8 @@ Respond STRICTLY in JSON format matching this interface:
   "model": "Sentinel-SAR-Analyzer",
   "task": "Scene VQA, Grounding, or Change Detection",
   "evidence": [{"type": "visual", "label": "Observation", "detail": "What you see"}],
-  "grounding": [{"bbox": [minX, minY, maxX, maxY], "label": "Feature name", "confidence": 90}], // Use NORMALIZED float values between 0.0 and 1.0 (e.g. 0.1, 0.25)
-  "change": {"change_detected": true/false, "description": "What changed", "changed_area_percent": 15.5},
+  "grounding": [{"bbox": [minX, minY, maxX, maxY], "label": "Feature name", "confidence": 90}], // Use NORMALIZED float values between 0.0 and 1.0 (e.g. 0.1, 0.25). ALWAYS provide bounding boxes if you detect specific objects or changes!
+  "change": {"change_detected": true/false, "description": "What changed", "changed_area_percent": 15.5}, // IF CHANGE IS DETECTED, YOU MUST ALSO POPULATE THE 'grounding' ARRAY WITH BOUNDING BOXES FOR THE CHANGED REGIONS!
   "metadata": [{"filename": "...", "modality": "optical"}]
 }
 Only output the JSON object without any markdown wrappers.`
@@ -129,10 +129,12 @@ Only output the JSON object without any markdown wrappers.`
     generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
   };
 
-  const modelsToTry = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3-flash"];
+  const modelsToTry = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
   let response;
   let lastErrorText = "Unknown API Error";
   let lastStatus = 500;
+
+  let successfulModel = "gemini-3.6-flash";
 
   for (const model of modelsToTry) {
     try {
@@ -144,6 +146,7 @@ Only output the JSON object without any markdown wrappers.`
       });
 
       if (response.ok) {
+        successfulModel = model;
         break;
       } else {
         lastErrorText = await response.text();
@@ -175,7 +178,7 @@ Only output the JSON object without any markdown wrappers.`
   jsonString = jsonString.replace(/```json/g, '').replace(/```/g, '').trim();
   const parsedResponse = JSON.parse(jsonString) as AnalysisResponse;
   
-  parsedResponse.model = "gemini-3.6-flash";
+  parsedResponse.model = successfulModel;
 
   // Add dummy execution trace for realism
   parsedResponse.execution_trace = {
@@ -201,21 +204,27 @@ Only output the JSON object without any markdown wrappers.`
 
 export async function generateChatTitle(query: string, apiKey: string): Promise<string> {
   if (!apiKey || !query.trim()) return query.slice(0, 30);
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: `Generate a very short, concise 3-4 word title for this chat based on the following user query. ONLY output the title, no quotes, no extra text. Query: "${query}"` }] }],
-        generationConfig: { temperature: 0.7 }
-      })
-    });
-    const data = await res.json();
-    if (res.ok && data.candidates && data.candidates[0].content.parts[0].text) {
-      return data.candidates[0].content.parts[0].text.replace(/["*]/g, '').trim();
+  const modelsToTry = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
+  
+  for (const model of modelsToTry) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Generate a very short, concise 3-4 word title for this chat based on the following user query. ONLY output the title, no quotes, no extra text. Query: "${query}"` }] }],
+          generationConfig: { temperature: 0.7 }
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.candidates && data.candidates[0].content.parts[0].text) {
+          return data.candidates[0].content.parts[0].text.replace(/["*]/g, '').trim();
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to generate chat title with ${model}`, e);
     }
-  } catch (e) {
-    console.warn("Failed to generate chat title", e);
   }
   return query.slice(0, 30);
 }

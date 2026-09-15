@@ -248,7 +248,7 @@ export default function Index() {
           setSessions(savedSessions);
           // Load the most recent session
           const latest = [...savedSessions].sort((a,b) => b.updatedAt - a.updatedAt)[0];
-          setCurrentSessionId(latest.id);
+          setCurrentSessionId(latest?.id || "");
         } else {
           // Check for legacy migration
           const legacy = await localforage.getItem<ChatMessage[]>("satquery.history");
@@ -260,15 +260,20 @@ export default function Index() {
             await localforage.setItem("satquery.sessions", [legacySession]);
             
             // Re-create object URLs for legacy files
-            const restored = legacy.map(m => ({
-              ...m,
-              images: m.images ? m.images.map(img => ({
-                ...img,
-                previewUrl: img.file ? URL.createObjectURL(img.file as File) : null
-              })) : undefined
-            }));
+            const restored = legacy.map(m => {
+              const newM = { ...m };
+              if (newM.images) {
+                newM.images = newM.images.map(img => ({
+                  ...img,
+                  previewUrl: img.file ? URL.createObjectURL(img.file as File) : null
+                }));
+              } else {
+                delete newM.images;
+              }
+              return newM;
+            });
             await localforage.setItem(`satquery.session_${legacyId}`, legacy); // save stripped version
-            setMessages(restored);
+            setMessages(restored as ChatMessage[]);
             await localforage.removeItem("satquery.history"); // cleanup
           } else {
             // Start fresh
@@ -286,14 +291,19 @@ export default function Index() {
     localforage.getItem<ChatMessage[]>(`satquery.session_${currentSessionId}`)
       .then((saved) => {
         if (saved) {
-           const restored = saved.map(m => ({
-            ...m,
-            images: m.images ? m.images.map(img => ({
-              ...img,
-              previewUrl: img.file ? URL.createObjectURL(img.file as File) : null
-            })) : undefined
-          }));
-          setMessages(restored);
+           const restored = saved.map(m => {
+             const newM = { ...m };
+             if (newM.images) {
+               newM.images = newM.images.map(img => ({
+                 ...img,
+                 previewUrl: img.file ? URL.createObjectURL(img.file as File) : null
+               }));
+             } else {
+               delete newM.images;
+             }
+             return newM;
+           });
+          setMessages(restored as ChatMessage[]);
         } else {
           setMessages([]); // New session
         }
@@ -305,10 +315,15 @@ export default function Index() {
     if (!currentSessionId) return;
     
     // Strip Object URLs before saving
-    const serialized = messages.map(m => ({
-      ...m,
-      images: m.images ? m.images.map(img => ({ ...img, previewUrl: null })) : undefined
-    }));
+    const serialized = messages.map(m => {
+      const newM = { ...m };
+      if (newM.images) {
+        newM.images = newM.images.map(img => ({ ...img, previewUrl: null }));
+      } else {
+        delete newM.images;
+      }
+      return newM;
+    });
     localforage.setItem(`satquery.session_${currentSessionId}`, serialized)
       .catch(e => console.warn("Storage error", e));
   }, [messages, currentSessionId]);
@@ -330,7 +345,7 @@ export default function Index() {
     
     if (currentSessionId === id) {
       if (updated.length > 0) {
-        setCurrentSessionId(updated[0].id);
+        setCurrentSessionId(updated[0]?.id || "");
       } else {
         createNewChat();
       }
@@ -370,16 +385,17 @@ export default function Index() {
     if (pendingImages.length > 0) return pendingImages;
     // Look backward in history for the last uploaded images
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].images && messages[i].images!.length > 0) {
+      const msg = messages[i];
+      if (msg && msg.images && msg.images.length > 0) {
         // Reconstruct basic structure (preview might be missing due to serialization)
-        return messages[i].images!;
+        return msg.images || [];
       }
     }
     return [];
   };
 
   const handleMapSelect = (bounds: [[number, number], [number, number]], imageFile?: File) => {
-    const q = `Analyze the region at coordinates [${bounds[0][0].toFixed(4)}, ${bounds[0][1].toFixed(4)}] to [${bounds[1][0].toFixed(4)}, ${bounds[1][1].toFixed(4)}].`;
+    const q = `Analyze the region at coordinates [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}].`;
     setQuery(q);
     
     if (imageFile) {
@@ -502,7 +518,7 @@ export default function Index() {
             <X className="size-6" />
           </button>
           <div className="w-full h-full flex items-center justify-center overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <BboxCanvas url={lightboxData.url} boxes={lightboxData.boxes} label={lightboxData.label} isLightbox={true} />
+            <BboxCanvas url={lightboxData.url} boxes={lightboxData.boxes} {...(lightboxData.label ? { label: lightboxData.label } : {})} isLightbox={true} />
           </div>
         </div>
       )}
@@ -669,7 +685,7 @@ export default function Index() {
                       );
                     }
                     if (msg.result) {
-                      return <AssistantBubble key={msg.id} msg={msg} onImageClick={(url, boxes, label) => setLightboxData({ url, boxes, label })} />;
+                      return <AssistantBubble key={msg.id} msg={msg} onImageClick={(url, boxes, label) => setLightboxData({ url, boxes, ...(label ? { label } : {}) })} />;
                     }
                     return null;
                   })}

@@ -8,7 +8,7 @@ export function BackendSettings({ onChange }: { onChange?: (key: string) => void
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const key = typeof window !== "undefined" ? window.localStorage.getItem("satquery.api_key") : "";
+    const key = typeof window !== "undefined" ? window.localStorage.getItem("satquery.apikey") : "";
     setValue(key || "");
     setOnline(!!key);
     
@@ -22,10 +22,10 @@ export function BackendSettings({ onChange }: { onChange?: (key: string) => void
   const save = () => {
     if (typeof window !== "undefined") {
       if (value) {
-        window.localStorage.setItem("satquery.api_key", value);
+        window.localStorage.setItem("satquery.apikey", value);
         setOnline(true);
       } else {
-        window.localStorage.removeItem("satquery.api_key");
+        window.localStorage.removeItem("satquery.apikey");
         setOnline(false);
       }
     }
