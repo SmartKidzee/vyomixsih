@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Satellite, Send, Paperclip, X, Loader2, AlertCircle, ChevronDown,
   ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3,
-  Menu, Map as MapIcon, MessageSquare
+  Menu, Map as MapIcon, MessageSquare, Eye
 } from "lucide-react";
 import { BackendSettings } from "@/components/BackendSettings";
 import { MapSelector } from "@/components/MapSelector";
@@ -12,7 +12,7 @@ import {
 } from "@/lib/satquery";
 import localforage from "localforage";
 import ReactMarkdown from "react-markdown";
-import { generateChatTitle, runOrchestration } from "@/services/geminiService";
+import { generateChatTitle, runOrchestration, analyzeWithGeoChat } from "@/services/geminiService";
 
 export interface UploadedImage {
   id: string;
@@ -84,6 +84,7 @@ function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; b
 function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick: (url: string, boxes: BoundingBox[], label?: string) => void }) {
   const r = msg.result!;
   const [traceOpen, setTraceOpen] = useState(false);
+  const [expandedChip, setExpandedChip] = useState<number | null>(null);
   const conf = formatConfidence(r.confidence);
   const ratio = confidenceRatio(r.confidence);
 
@@ -118,17 +119,68 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
           )}
         </div>
 
-        {/* Evidence chips */}
+        {/* Evidence chips — clickable to expand with image preview */}
         {r.evidence && r.evidence.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {(r.evidence as any[]).map((e: any, i: number) => (
-              <div key={i} className="flex items-center gap-1.5 rounded-full bg-[#3D7E5D]/10 border border-[#3D7E5D]/20 px-3 py-1 text-xs font-semibold text-[#3D7E5D]">
-                <Check className="size-3.5 shrink-0" />
-                <span className="truncate max-w-[250px]">
-                  {typeof e === "string" ? e : (e.label ?? e.type ?? "Evidence")}
-                </span>
-              </div>
-            ))}
+          <div className="flex flex-col gap-2 mt-2">
+            <div className="flex flex-wrap gap-2">
+              {(r.evidence as any[]).map((e: any, i: number) => {
+                const label = typeof e === "string" ? e : (e.label ?? e.type ?? "Evidence");
+                const isExpanded = expandedChip === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setExpandedChip(isExpanded ? null : i)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                      isExpanded
+                        ? "bg-[#3D7E5D] text-white border border-[#3D7E5D] shadow-sm"
+                        : "bg-[#3D7E5D]/10 border border-[#3D7E5D]/20 text-[#3D7E5D] hover:bg-[#3D7E5D]/20"
+                    }`}
+                  >
+                    <Check className="size-3.5 shrink-0" />
+                    <span className="truncate max-w-[250px]">{label}</span>
+                    <Eye className={`size-3 shrink-0 transition-opacity ${isExpanded ? "opacity-100" : "opacity-50"}`} />
+                  </button>
+                );
+              })}
+            </div>
+            {expandedChip !== null && (() => {
+              const e = (r.evidence as any[])[expandedChip];
+              const detail = typeof e === "string" ? e : (e?.detail ?? e?.description ?? null);
+              const label = typeof e === "string" ? e : (e?.label ?? e?.type ?? "Evidence");
+              // Find the first image that has a previewUrl
+              const previewImg = msg.images?.find(img => img.previewUrl);
+              // Find matching grounding box for this evidence label
+              const matchingBox = r.grounding?.find((g: BoundingBox) => g.label?.toLowerCase().includes(label.toLowerCase()) || label.toLowerCase().includes(g.label?.toLowerCase() ?? ""));
+              const highlightBoxes = matchingBox ? [matchingBox] : (r.grounding || []);
+
+              return (
+                <div className="rounded-xl bg-white border border-[#E5E0D8] shadow-sm overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Image preview */}
+                  {previewImg?.previewUrl && (
+                    <div className="relative cursor-zoom-in" onClick={() => onImageClick(previewImg.previewUrl!, highlightBoxes, label)}>
+                      {highlightBoxes.length > 0 ? (
+                        <BboxCanvas url={previewImg.previewUrl} boxes={highlightBoxes} label={label} />
+                      ) : (
+                        <>
+                          <div className="absolute top-2 left-2 z-10 bg-[#1F1E1B]/80 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm">{label}</div>
+                          <img src={previewImg.previewUrl} alt={label} className="w-full max-h-64 object-contain bg-[#F8F7F4]" />
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {/* Detail text */}
+                  {detail && (
+                    <div className="px-4 py-3 border-t border-[#F2EFEA]">
+                      <p className="text-xs font-bold text-[#3D7E5D] uppercase tracking-wider mb-1">{label}</p>
+                      <p className="text-sm text-[#1F1E1B] leading-relaxed">{detail}</p>
+                    </div>
+                  )}
+                  {!detail && !previewImg?.previewUrl && (
+                    <div className="px-4 py-3 text-sm text-[#7D786F] italic">{label}</div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -452,12 +504,13 @@ export default function Index() {
 
     // Session logic: Update timestamp and title only when actually submitting
     const apiKey = localStorage.getItem("satquery.apikey");
-    let needsTitle = false;
+    // Check if session exists BEFORE calling setSessions, so the variable is
+    // captured synchronously (the setter callback is batched by React).
+    const needsTitle = !sessions.find(s => s.id === currentSessionId);
     
     setSessions(prev => {
       const existing = prev.find(s => s.id === currentSessionId);
       if (!existing) {
-         needsTitle = true;
          const initialSession = { id: currentSessionId, title: "New Chat...", updatedAt: Date.now() };
          const updated = [initialSession, ...prev];
          localforage.setItem("satquery.sessions", updated);
@@ -484,7 +537,13 @@ export default function Index() {
       // Use either newly attached images, or carry forward the context ones
       const filesToAnalyze = isNewImage ? imgs.map((i) => i.file) : contextImages.map(i => i.file);
       
-      const res = await runOrchestration(query.trim() || "Analyze this context.", filesToAnalyze, (m) => setProgressText(m));
+      let res;
+      // TEMPORARILY DISABLED GEOCHAT: The user requested to strictly use Gemini for everything right now
+      if (messages.length === -1) {
+        res = await analyzeWithGeoChat(query.trim() || "Analyze this context.", filesToAnalyze);
+      } else {
+        res = await runOrchestration(query.trim() || "Analyze this context.", filesToAnalyze, (m) => setProgressText(m));
+      }
       
       const resMsg: ChatMessage = { id: Math.random().toString(), role: "assistant", result: res };
       resMsg.images = isNewImage ? imgs : contextImages;
@@ -506,7 +565,7 @@ export default function Index() {
 
   return (
     <div 
-      className="flex h-screen bg-[#FDFBF7] font-sans antialiased overflow-hidden"
+      className="flex h-[100dvh] bg-[#FDFBF7] font-sans antialiased overflow-hidden"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -651,7 +710,8 @@ export default function Index() {
                               <div className="flex flex-wrap gap-2 mb-2 justify-end">
                                 {msg.images.filter(Boolean).map((img) => img.previewUrl ? (
                                   <img key={img.id} src={img.previewUrl} alt={img.file.name}
-                                    className="rounded-lg border border-[#E5E0D8] max-h-16 w-auto object-cover shadow-sm" />
+                                    onClick={() => setLightboxData({ url: img.previewUrl!, boxes: [] })}
+                                    className="rounded-lg border border-[#E5E0D8] max-h-16 w-auto object-cover shadow-sm cursor-zoom-in hover:ring-2 hover:ring-[#CC5A37]/40 transition-all" />
                                 ) : (
                                   <div key={img.id} className="flex items-center gap-1.5 rounded-lg border border-[#E5E0D8] bg-white px-2 py-1.5 text-xs text-[#7D786F] shadow-sm">
                                     <FileImage className="size-3.5 shrink-0" />

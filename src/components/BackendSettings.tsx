@@ -1,16 +1,23 @@
 import { useEffect, useState, useRef } from "react";
 import { Settings, CheckCircle2, AlertCircle } from "lucide-react";
 
-export function BackendSettings({ onChange }: { onChange?: (key: string) => void }) {
+export function BackendSettings({ onChange }: { onChange?: (keys: any) => void }) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [gradioUrl, setGradioUrl] = useState("");
   const [online, setOnline] = useState<boolean | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const key = typeof window !== "undefined" ? window.localStorage.getItem("satquery.apikey") : "";
-    setValue(key || "");
-    setOnline(!!key);
+    const getStorage = (key: string) => typeof window !== "undefined" ? window.localStorage.getItem(key) : "";
+    const gKey = getStorage("satquery.apikey") || "";
+    const grUrl = getStorage("satquery.gradiourl") || "";
+
+    setGeminiKey(gKey);
+    setGradioUrl(grUrl);
+    
+    // Consider online if at least Gemini or Gradio is configured
+    setOnline(!!gKey || !!grUrl);
     
     const handleClickOutside = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -21,15 +28,12 @@ export function BackendSettings({ onChange }: { onChange?: (key: string) => void
 
   const save = () => {
     if (typeof window !== "undefined") {
-      if (value) {
-        window.localStorage.setItem("satquery.apikey", value);
-        setOnline(true);
-      } else {
-        window.localStorage.removeItem("satquery.apikey");
-        setOnline(false);
-      }
+      const setStorage = (k: string, v: string) => v ? window.localStorage.setItem(k, v) : window.localStorage.removeItem(k);
+      setStorage("satquery.apikey", geminiKey);
+      setStorage("satquery.gradiourl", gradioUrl);
+      setOnline(!!geminiKey || !!gradioUrl);
     }
-    onChange?.(value);
+    onChange?.({ geminiKey, gradioUrl });
     setOpen(false);
   };
 
@@ -50,19 +54,32 @@ export function BackendSettings({ onChange }: { onChange?: (key: string) => void
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-[#E5E0D8] bg-[#FFFFFF] p-5 shadow-[0_10px_40px_-10px_rgba(31,30,27,0.1)]">
+        <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-[#E5E0D8] bg-[#FFFFFF] p-5 shadow-[0_10px_40px_-10px_rgba(31,30,27,0.1)] max-h-[80vh] overflow-y-auto">
           <h3 className="mb-4 text-sm font-bold text-[#1F1E1B] font-serif">Configuration</h3>
           
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#7D786F]">
-                API Key
+                Gemini API Key
               </label>
               <input
-                value={value}
+                value={geminiKey}
                 type="password"
-                onChange={(e) => setValue(e.target.value)}
+                onChange={(e) => setGeminiKey(e.target.value)}
                 placeholder="AIzaSy..."
+                className="w-full rounded-xl border border-[#E5E0D8] bg-[#FAF9F5] p-2.5 font-mono text-sm text-[#1F1E1B] outline-none transition-colors focus:border-[#1F1E1B] focus:ring-1 focus:ring-[#1F1E1B]"
+              />
+            </div>
+            
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#7D786F]">
+                GeoChat Gradio URL
+              </label>
+              <input
+                value={gradioUrl}
+                type="url"
+                onChange={(e) => setGradioUrl(e.target.value)}
+                placeholder="https://...gradio.live"
                 className="w-full rounded-xl border border-[#E5E0D8] bg-[#FAF9F5] p-2.5 font-mono text-sm text-[#1F1E1B] outline-none transition-colors focus:border-[#1F1E1B] focus:ring-1 focus:ring-[#1F1E1B]"
               />
             </div>

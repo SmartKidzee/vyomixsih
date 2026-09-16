@@ -3,7 +3,7 @@ import * as GeoTIFF from 'geotiff';
 
 const getApiKey = () => {
   if (typeof window !== "undefined") {
-    const key = window.localStorage.getItem("satquery.api_key");
+    const key = window.localStorage.getItem("satquery.apikey");
     if (key) return key;
   }
   return import.meta.env["VITE_GEMINI_API_KEY"] as string | undefined;
@@ -11,8 +11,8 @@ const getApiKey = () => {
 
 export const setApiKey = (key: string) => {
   if (typeof window === "undefined") return;
-  if (key) window.localStorage.setItem("satquery.api_key", key);
-  else window.localStorage.removeItem("satquery.api_key");
+  if (key) window.localStorage.setItem("satquery.apikey", key);
+  else window.localStorage.removeItem("satquery.apikey");
 };
 
 async function fileToBase64(file: File): Promise<string> {
@@ -91,12 +91,10 @@ export async function analyzeWithGemini(
 
   const parts: any[] = [];
   parts.push({
-    text: `You are an advanced Spatial Intelligence Model. 
-Your task is to analyze the provided images and respond accurately to the query: "${query}". 
+    text: `You are an advanced Satellite Imagery Analysis Model named "Sentinel-SAR-Analyzer". 
+Your task is to analyze the provided images and respond to the query: "${query}". 
 
-CRITICAL REQUIREMENT: For queries detecting "water bodies", "lakes", "rivers", "sea", or similar features, you MUST precisely extract accurate normalized bounding boxes enclosing ONLY the actual water bodies. Do not hallucinate bounding boxes. If no water is clearly visible, return an empty grounding array.
-
-If multiple images are provided, it is a bi-temporal (change detection) or multi-modal task. Image 1 is the Pre-Event Baseline, and Image 2 is the Post-Event Observation.
+If multiple images are provided, it is a bi-temporal (change detection) or multi-modal task.
 
 Respond STRICTLY in JSON format matching this interface:
 {
@@ -105,8 +103,8 @@ Respond STRICTLY in JSON format matching this interface:
   "model": "Sentinel-SAR-Analyzer",
   "task": "Scene VQA, Grounding, or Change Detection",
   "evidence": [{"type": "visual", "label": "Observation", "detail": "What you see"}],
-  "grounding": [{"bbox": [minX, minY, maxX, maxY], "label": "Feature name", "confidence": 90}], // Use NORMALIZED float values between 0.0 and 1.0 (e.g. 0.1, 0.25). ALWAYS provide bounding boxes if you detect specific objects or changes!
-  "change": {"change_detected": true/false, "description": "What changed", "changed_area_percent": 15.5}, // IF CHANGE IS DETECTED, YOU MUST ALSO POPULATE THE 'grounding' ARRAY WITH BOUNDING BOXES FOR THE CHANGED REGIONS!
+  "grounding": [{"bbox": [minX, minY, maxX, maxY], "label": "Feature name", "confidence": 90}], // Use NORMALIZED float values between 0.0 and 1.0 (e.g. 0.1, 0.25). e.g. [10, 10, 50, 50]
+  "change": {"change_detected": true/false, "description": "What changed"},
   "metadata": [{"filename": "...", "modality": "optical"}]
 }
 Only output the JSON object without any markdown wrappers.`
@@ -271,4 +269,39 @@ export async function runOrchestration(
   };
   
   return res;
+}
+
+export async function analyzeWithGeoChat(
+  query: string,
+  files: File[]
+): Promise<AnalysisResponse> {
+  const gradioUrl = typeof window !== "undefined" ? window.localStorage.getItem("satquery.gradiourl") : "";
+  if (!gradioUrl) {
+    throw new SatQueryError("No GeoChat Gradio URL found. Please add it to your environment or settings.", 0);
+  }
+
+  try {
+    const { Client } = await import("@gradio/client");
+    const client = await Client.connect(gradioUrl);
+    
+    const result = await client.predict("/predict", {
+      image: files[0],
+      query: query,
+      task_type: "vqa"
+    });
+    
+    const data = result.data as any[];
+    if (data && data[0]) {
+       try {
+           const parsed = typeof data[0] === 'string' ? JSON.parse(data[0]) : data[0];
+           return parsed as AnalysisResponse;
+       } catch (e) {
+           throw new SatQueryError("GeoChat returned invalid JSON", 500);
+       }
+    }
+    
+    throw new SatQueryError("Invalid response from GeoChat API", 500);
+  } catch (error: any) {
+    throw new SatQueryError(`GeoChat API Error: ${error.message || "Unknown error"}`, 0);
+  }
 }

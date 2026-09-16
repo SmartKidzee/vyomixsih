@@ -115,8 +115,12 @@ export function setApiBaseUrl(url: string) {
 /** Turn any backend/network failure into a sentence a human can act on. */
 export function humanizeError(err: unknown): string {
   if (err instanceof SatQueryError) {
-    if (err.status === 0)
+    if (err.status === 0) {
+      if (err.message && (err.message.includes("GeoChat") || err.message.includes("Gemini"))) {
+        return err.message; // Preserve specific network errors
+      }
       return "Could not reach the SatQuery backend. Check that it is running and that the address in Backend settings is correct.";
+    }
     if (err.status === 413) return "That file is too large for the backend to accept.";
     if (err.status === 415) return "That file format isn't supported by the backend.";
     if (err.status === 422 || err.status === 400) return err.message;
