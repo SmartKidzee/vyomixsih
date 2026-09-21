@@ -1,0 +1,350 @@
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+
+export type Language = "en" | "hi" | "kn";
+
+export const LANGUAGES: { code: Language; label: string; nativeLabel: string }[] = [
+  { code: "en", label: "English", nativeLabel: "English" },
+  { code: "hi", label: "Hindi", nativeLabel: "हिन्दी" },
+  { code: "kn", label: "Kannada", nativeLabel: "ಕನ್ನಡ" },
+];
+
+// Translation keys
+const translations: Record<Language, Record<string, string>> = {
+  en: {
+    "app.title": "Earth Query Lens",
+    "app.subtitle": "Multimodal Geospatial AI",
+    "nav.chat": "Chat",
+    "nav.map": "Map",
+    "nav.newChat": "New Chat",
+    "sidebar.chats": "Chats",
+    "sidebar.noChats": "No previous chats.",
+    "sidebar.deleteChat": "Delete Chat",
+    "settings.title": "Configuration",
+    "settings.geminiKey": "Gemini API Key",
+    "settings.gradioUrl": "GeoChat Gradio URL",
+    "settings.cancel": "Cancel",
+    "settings.save": "Save",
+    "input.placeholder.empty": "Ask about your satellite imagery...",
+    "input.placeholder.followup": "Ask follow-up questions or drag to map...",
+    "input.formats": "Supports GeoTIFF · TIFF · PNG · JPEG · BigEarth · JP2 · SAR",
+    "input.attach": "Attach imagery (max 2 for bi-temporal)",
+    "drop.title": "Drop images to upload",
+    "drop.subtitle": "Supports TIFF, JPG, and PNG files",
+    "map.selectRegion": "Select Region",
+    "map.drawInstruction": "Click and drag to draw a box.",
+    "map.panInstruction": "Pan and zoom, or draw a new region.",
+    "map.drawArea": "Draw Area",
+    "map.cancelDrawing": "Cancel Drawing",
+    "map.sendToChat": "Send to Chat",
+    "map.capturing": "Capturing...",
+    "map.useLocation": "Use Live Location",
+    "map.locating": "Getting location...",
+    "map.locationError": "Location access denied",
+    "map.locationHint": "Your browser will ask for permission to access GPS",
+    "confidence": "Confidence",
+    "evidence": "Evidence",
+    "executionTrace": "Execution Trace",
+    "processing": "Processing...",
+    "initializing": "Initializing...",
+    "translating": "Translating response...",
+    "biTemporal": "Bi-temporal mode",
+    "preEvent": "T1: Pre-event",
+    "postEvent": "T2: Post-event",
+    "changeDetected": "⚠ Significant Change Detected",
+    "noChange": "✓ No Significant Change",
+    "estimatedArea": "Estimated Affected Area",
+    "language": "Language",
+    "chart.title": "Temporal Change Analysis",
+    "chart.vegetation": "Vegetation Canopy",
+    "chart.urban": "Urban / Built Area",
+    "chart.water": "Water Bodies",
+    "chart.barren": "Undisturbed Terrain",
+    "chart.preEvent": "Pre-Event (T1)",
+    "chart.postEvent": "Post-Event (T2)",
+    "chart.bar": "Bar Chart",
+    "chart.spline": "Spline Curve",
+    "chart.radar": "Radar Graph",
+    "chart.all": "All Views",
+    "chart.highlighted": "Highlighted Features",
+    "clickToPreview": "Click to preview",
+  },
+  hi: {
+    "app.title": "अर्थ क्वेरी लेंस",
+    "app.subtitle": "मल्टीमॉडल भू-स्थानिक AI",
+    "nav.chat": "चैट",
+    "nav.map": "मानचित्र",
+    "nav.newChat": "नई चैट",
+    "sidebar.chats": "चैट्स",
+    "sidebar.noChats": "कोई पिछली चैट नहीं।",
+    "sidebar.deleteChat": "चैट हटाएं",
+    "settings.title": "कॉन्फ़िगरेशन",
+    "settings.geminiKey": "Gemini API कुंजी",
+    "settings.gradioUrl": "GeoChat Gradio URL",
+    "settings.cancel": "रद्द करें",
+    "settings.save": "सहेजें",
+    "input.placeholder.empty": "अपनी सैटेलाइट इमेजरी के बारे में पूछें...",
+    "input.placeholder.followup": "फॉलो-अप प्रश्न पूछें या मानचित्र पर खींचें...",
+    "input.formats": "GeoTIFF · TIFF · PNG · JPEG · BigEarth · JP2 · SAR समर्थित",
+    "input.attach": "इमेजरी संलग्न करें (बाई-टेम्पोरल के लिए अधिकतम 2)",
+    "drop.title": "अपलोड करने के लिए चित्र छोड़ें",
+    "drop.subtitle": "TIFF, JPG, और PNG फ़ाइलें समर्थित हैं",
+    "map.selectRegion": "क्षेत्र चुनें",
+    "map.drawInstruction": "बॉक्स बनाने के लिए क्लिक करें और खींचें।",
+    "map.panInstruction": "पैन और ज़ूम करें, या नया क्षेत्र बनाएं।",
+    "map.drawArea": "क्षेत्र बनाएं",
+    "map.cancelDrawing": "ड्राइंग रद्द करें",
+    "map.sendToChat": "चैट पर भेजें",
+    "map.capturing": "कैप्चर हो रहा है...",
+    "map.useLocation": "लाइव लोकेशन उपयोग करें",
+    "map.locating": "लोकेशन प्राप्त कर रहे हैं...",
+    "map.locationError": "लोकेशन एक्सेस अस्वीकृत",
+    "map.locationHint": "ब्राउज़र GPS एक्सेस के लिए अनुमति मांगेगा",
+    "confidence": "विश्वास स्तर",
+    "evidence": "साक्ष्य",
+    "executionTrace": "निष्पादन ट्रेस",
+    "processing": "प्रोसेसिंग...",
+    "initializing": "आरंभ हो रहा है...",
+    "translating": "अनुवाद हो रहा है...",
+    "biTemporal": "बाई-टेम्पोरल मोड",
+    "preEvent": "T1: पूर्व-घटना",
+    "postEvent": "T2: पश्चात-घटना",
+    "changeDetected": "⚠ महत्वपूर्ण परिवर्तन पाया गया",
+    "noChange": "✓ कोई महत्वपूर्ण परिवर्तन नहीं",
+    "estimatedArea": "अनुमानित प्रभावित क्षेत्र",
+    "language": "भाषा",
+    "chart.title": "कालक्रम परिवर्तन विश्लेषण",
+    "chart.vegetation": "वनस्पति छत्र",
+    "chart.urban": "शहरी / निर्मित क्षेत्र",
+    "chart.water": "जल निकाय",
+    "chart.barren": "अछूता भू-भाग",
+    "chart.preEvent": "पूर्व-घटना (T1)",
+    "chart.postEvent": "पश्चात-घटना (T2)",
+    "chart.bar": "बार चार्ट",
+    "chart.spline": "स्प्लाइन वक्र",
+    "chart.radar": "रडार ग्राफ",
+    "chart.all": "सभी दृश्य",
+    "chart.highlighted": "हाइलाइट की गई विशेषताएं",
+    "clickToPreview": "देखने के लिए क्लिक करें",
+  },
+  kn: {
+    "app.title": "ಅರ್ತ್ ಕ್ವೆರಿ ಲೆನ್ಸ್",
+    "app.subtitle": "ಮಲ್ಟಿಮೋಡಲ್ ಭೌಗೋಳಿಕ AI",
+    "nav.chat": "ಚಾಟ್",
+    "nav.map": "ನಕ್ಷೆ",
+    "nav.newChat": "ಹೊಸ ಚಾಟ್",
+    "sidebar.chats": "ಚಾಟ್‌ಗಳು",
+    "sidebar.noChats": "ಹಿಂದಿನ ಚಾಟ್‌ಗಳಿಲ್ಲ.",
+    "sidebar.deleteChat": "ಚಾಟ್ ಅಳಿಸಿ",
+    "settings.title": "ಸಂರಚನೆ",
+    "settings.geminiKey": "Gemini API ಕೀ",
+    "settings.gradioUrl": "GeoChat Gradio URL",
+    "settings.cancel": "ರದ್ದುಮಾಡಿ",
+    "settings.save": "ಉಳಿಸಿ",
+    "input.placeholder.empty": "ನಿಮ್ಮ ಸ್ಯಾಟಲೈಟ್ ಚಿತ್ರಗಳ ಬಗ್ಗೆ ಕೇಳಿ...",
+    "input.placeholder.followup": "ಫಾಲೋ-ಅಪ್ ಪ್ರಶ್ನೆಗಳನ್ನು ಕೇಳಿ ಅಥವಾ ನಕ್ಷೆಗೆ ಎಳೆಯಿರಿ...",
+    "input.formats": "GeoTIFF · TIFF · PNG · JPEG · BigEarth · JP2 · SAR ಬೆಂಬಲಿತ",
+    "input.attach": "ಚಿತ್ರಗಳನ್ನು ಲಗತ್ತಿಸಿ (ಬೈ-ಟೆಂಪೋರಲ್‌ಗಾಗಿ ಗರಿಷ್ಠ 2)",
+    "drop.title": "ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಚಿತ್ರಗಳನ್ನು ಬಿಡಿ",
+    "drop.subtitle": "TIFF, JPG, ಮತ್ತು PNG ಫೈಲ್‌ಗಳನ್ನು ಬೆಂಬಲಿಸುತ್ತದೆ",
+    "map.selectRegion": "ಪ್ರದೇಶ ಆಯ್ಕೆಮಾಡಿ",
+    "map.drawInstruction": "ಬಾಕ್ಸ್ ಎಳೆಯಲು ಕ್ಲಿಕ್ ಮಾಡಿ ಮತ್ತು ಎಳೆಯಿರಿ.",
+    "map.panInstruction": "ಪ್ಯಾನ್ ಮತ್ತು ಜೂಮ್ ಮಾಡಿ, ಅಥವಾ ಹೊಸ ಪ್ರದೇಶ ಎಳೆಯಿರಿ.",
+    "map.drawArea": "ಪ್ರದೇಶ ಎಳೆಯಿರಿ",
+    "map.cancelDrawing": "ಡ್ರಾಯಿಂಗ್ ರದ್ದುಮಾಡಿ",
+    "map.sendToChat": "ಚಾಟ್‌ಗೆ ಕಳುಹಿಸಿ",
+    "map.capturing": "ಕ್ಯಾಪ್ಚರ್ ಆಗುತ್ತಿದೆ...",
+    "map.useLocation": "ಲೈವ್ ಲೊಕೇಶನ್ ಬಳಸಿ",
+    "map.locating": "ಸ್ಥಳ ಪಡೆಯಲಾಗುತ್ತಿದೆ...",
+    "map.locationError": "ಸ್ಥಳ ಪ್ರವೇಶ ನಿರಾಕರಿಸಲಾಗಿದೆ",
+    "map.locationHint": "ಬ್ರೌಸರ್ GPS ಪ್ರವೇಶಕ್ಕಾಗಿ ಅನುಮತಿ ಕೇಳುತ್ತದೆ",
+    "confidence": "ವಿಶ್ವಾಸ",
+    "evidence": "ಸಾಕ್ಷ್ಯ",
+    "executionTrace": "ಎಕ್ಸಿಕ್ಯೂಶನ್ ಟ್ರೇಸ್",
+    "processing": "ಪ್ರಕ್ರಿಯೆ ಆಗುತ್ತಿದೆ...",
+    "initializing": "ಪ್ರಾರಂಭಿಸಲಾಗುತ್ತಿದೆ...",
+    "translating": "ಅನುವಾದ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "biTemporal": "ಬೈ-ಟೆಂಪೋರಲ್ ಮೋಡ್",
+    "preEvent": "T1: ಪೂರ್ವ-ಘಟನೆ",
+    "postEvent": "T2: ನಂತರದ-ಘಟನೆ",
+    "changeDetected": "⚠ ಗಮನಾರ್ಹ ಬದಲಾವಣೆ ಪತ್ತೆಯಾಗಿದೆ",
+    "noChange": "✓ ಯಾವುದೇ ಗಮನಾರ್ಹ ಬದಲಾವಣೆ ಇಲ್ಲ",
+    "estimatedArea": "ಅಂದಾಜು ಪ್ರಭಾವಿತ ಪ್ರದೇಶ",
+    "language": "ಭಾಷೆ",
+    "chart.title": "ಕಾಲಾನುಕ್ರಮ ಬದಲಾವಣೆ ವಿಶ್ಲೇಷಣೆ",
+    "chart.vegetation": "ಸಸ್ಯವರ್ಗದ ಮೇಲಾವರಣ",
+    "chart.urban": "ನಗರ / ನಿರ್ಮಿತ ಪ್ರದೇಶ",
+    "chart.water": "ಜಲ ಮೂಲಗಳು",
+    "chart.barren": "ಅಬಾಧಿತ ಭೂಪ್ರದೇಶ",
+    "chart.preEvent": "ಪೂರ್ವ-ಘಟನೆ (T1)",
+    "chart.postEvent": "ನಂತರದ-ಘಟನೆ (T2)",
+    "chart.bar": "ಬಾರ್ ಚಾರ್ಟ್",
+    "chart.spline": "ಸ್ಪ್ಲೈನ್ ಕರ್ವ್",
+    "chart.radar": "ರಾಡಾರ್ ಗ್ರಾಫ್",
+    "chart.all": "ಎಲ್ಲಾ ವೀಕ್ಷಣೆಗಳು",
+    "chart.highlighted": "ಮುಖ್ಯಾಂಶಗೊಳಿಸಿದ ವೈಶಿಷ್ಟ್ಯಗಳು",
+    "clickToPreview": "ಪೂರ್ವವೀಕ್ಷಣೆಗೆ ಕ್ಲಿಕ್ ಮಾಡಿ",
+  },
+};
+
+// Greetings per language
+export const SPACE_GREETINGS: Record<Language, string[]> = {
+  en: [
+    "Houston, we have a query.",
+    "Scanning the cosmos for answers.",
+    "Orbital view engaged.",
+    "Launching satellite uplink.",
+    "Coordinates locked. Ready for analysis.",
+    "Ground control to Major Tom.",
+    "Entering geospatial orbit.",
+    "Mission control standing by.",
+    "Telescope aligned. Awaiting target.",
+    "Star maps loaded. What do you seek?",
+    "Engaging deep space scanners.",
+    "Initiating satellite handshake.",
+    "Altitude nominal. Awaiting directive.",
+    "Quantum uplink established.",
+    "The cosmos awaits your query.",
+  ],
+  hi: [
+    "ह्यूस्टन, हमारे पास एक प्रश्न है।",
+    "ब्रह्मांड में उत्तर खोज रहे हैं।",
+    "कक्षीय दृश्य सक्रिय है।",
+    "उपग्रह अपलिंक शुरू हो रहा है।",
+    "निर्देशांक लॉक हैं। विश्लेषण के लिए तैयार।",
+    "ग्राउंड कंट्रोल से मेजर टॉम।",
+    "भू-स्थानिक कक्षा में प्रवेश।",
+    "मिशन कंट्रोल तैयार है।",
+    "दूरबीन संरेखित। लक्ष्य की प्रतीक्षा में।",
+    "तारा मानचित्र लोड हुए। आप क्या खोज रहे हैं?",
+    "गहन अंतरिक्ष स्कैनर सक्रिय हैं।",
+    "उपग्रह संपर्क स्थापित हो रहा है।",
+    "ऊंचाई सामान्य है। निर्देश की प्रतीक्षा है।",
+    "क्वांटम अपलिंक स्थापित।",
+    "ब्रह्मांड आपके प्रश्न की प्रतीक्षा में है।",
+  ],
+  kn: [
+    "ಹ್ಯೂಸ್ಟನ್, ನಮ್ಮ ಬಳಿ ಒಂದು ಪ್ರಶ್ನೆ ಇದೆ.",
+    "ಉತ್ತರಗಳಿಗಾಗಿ ಬ್ರಹ್ಮಾಂಡವನ್ನು ಸ್ಕ್ಯಾನ್ ಮಾಡಲಾಗುತ್ತಿದೆ.",
+    "ಕಕ್ಷೆಯ ದೃಶ್ಯ ಸಕ್ರಿಯವಾಗಿದೆ.",
+    "ಉಪಗ್ರಹ ಅಪ್‌ಲಿಂಕ್ ಪ್ರಾರಂಭವಾಗಿದೆ.",
+    "ನಿರ್ದೇಶಾಂಕಗಳು ಲಾಕ್. ವಿಶ್ಲೇಷಣೆಗೆ ಸಿದ್ಧ.",
+    "ಗ್ರೌಂಡ್ ಕಂಟ್ರೋಲ್ ನಿಂದ ಮೇಜರ್ ಟಾಮ್.",
+    "ಭೌಗೋಳಿಕ ಕಕ್ಷೆಯನ್ನು ಪ್ರವೇಶಿಸಲಾಗುತ್ತಿದೆ.",
+    "ಮಿಷನ್ ಕಂಟ್ರೋಲ್ ಸಿದ್ಧವಾಗಿದೆ.",
+    "ದೂರದರ್ಶಕ ಜೋಡಿಸಲಾಗಿದೆ. ಗುರಿಗಾಗಿ ಕಾಯುತ್ತಿದೆ.",
+    "ನಕ್ಷತ್ರ ನಕ್ಷೆಗಳು ಲೋಡ್ ಆಗಿವೆ. ನೀವೇನು ಹುಡುಕುತ್ತಿದ್ದೀರಿ?",
+    "ಡೀಪ್ ಸ್ಪೇಸ್ ಸ್ಕ್ಯಾನರ್‌ಗಳು ಸಕ್ರಿಯವಾಗಿವೆ.",
+    "ಉಪಗ್ರಹ ಸಂಪರ್ಕ ಪ್ರಾರಂಭವಾಗಿದೆ.",
+    "ಎತ್ತರ ಸಾಮಾನ್ಯವಾಗಿದೆ. ನಿರ್ದೇಶನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ.",
+    "ಕ್ವಾಂಟಮ್ ಸಂಪರ್ಕ ಸ್ಥಾಪಿಸಲಾಗಿದೆ.",
+    "ಬ್ರಹ್ಮಾಂಡ ನಿಮ್ಮ ಪ್ರಶ್ನೆಗಾಗಿ ಕಾಯುತ್ತಿದೆ.",
+  ],
+};
+
+// Suggestion prompts per language
+export const ALL_SUGGESTIONS: Record<Language, { q: string; icon: string }[]> = {
+  en: [
+    { q: "Describe this terrain from orbit", icon: "🛰️" },
+    { q: "Detect water bodies in this region", icon: "🌊" },
+    { q: "What changed between these images?", icon: "🔄" },
+    { q: "Identify urban sprawl patterns", icon: "🏙️" },
+    { q: "Analyze vegetation density", icon: "🌿" },
+    { q: "Map the coastline erosion", icon: "🏖️" },
+    { q: "Detect cloud cover percentage", icon: "☁️" },
+    { q: "Find agricultural field boundaries", icon: "🌾" },
+    { q: "Assess flood damage in this area", icon: "🌧️" },
+    { q: "Track deforestation patterns", icon: "🌲" },
+    { q: "Identify solar farm installations", icon: "☀️" },
+    { q: "Detect road network changes", icon: "🛤️" },
+    { q: "Map glacier retreat over time", icon: "🧊" },
+    { q: "Analyze night light distribution", icon: "🌃" },
+    { q: "Identify ship traffic patterns", icon: "🚢" },
+    { q: "Assess wildfire burn severity", icon: "🔥" },
+  ],
+  hi: [
+    { q: "इस भू-भाग का कक्षा से वर्णन करें", icon: "🛰️" },
+    { q: "इस क्षेत्र में जल निकाय खोजें", icon: "🌊" },
+    { q: "इन चित्रों के बीच क्या बदला?", icon: "🔄" },
+    { q: "शहरी विस्तार पैटर्न पहचानें", icon: "🏙️" },
+    { q: "वनस्पति घनत्व का विश्लेषण करें", icon: "🌿" },
+    { q: "तटरेखा कटाव का मानचित्र बनाएं", icon: "🏖️" },
+    { q: "बादल आवरण प्रतिशत पता लगाएं", icon: "☁️" },
+    { q: "कृषि क्षेत्र की सीमाएं खोजें", icon: "🌾" },
+    { q: "इस क्षेत्र में बाढ़ क्षति का आकलन करें", icon: "🌧️" },
+    { q: "वनों की कटाई के पैटर्न का पता लगाएं", icon: "🌲" },
+    { q: "सौर फार्म स्थापनाओं की पहचान करें", icon: "☀️" },
+    { q: "सड़क नेटवर्क परिवर्तन खोजें", icon: "🛤️" },
+    { q: "हिमनद पीछे हटने का मानचित्र बनाएं", icon: "🧊" },
+    { q: "रात की रोशनी वितरण का विश्लेषण करें", icon: "🌃" },
+    { q: "जहाज यातायात पैटर्न पहचानें", icon: "🚢" },
+    { q: "जंगल की आग की गंभीरता का आकलन करें", icon: "🔥" },
+  ],
+  kn: [
+    { q: "ಈ ಭೂಪ್ರದೇಶವನ್ನು ಕಕ್ಷೆಯಿಂದ ವಿವರಿಸಿ", icon: "🛰️" },
+    { q: "ಈ ಪ್ರದೇಶದಲ್ಲಿ ಜಲ ಮೂಲಗಳನ್ನು ಕಂಡುಹಿಡಿಯಿರಿ", icon: "🌊" },
+    { q: "ಈ ಚಿತ್ರಗಳ ನಡುವೆ ಏನು ಬದಲಾಯಿತು?", icon: "🔄" },
+    { q: "ನಗರ ವಿಸ್ತರಣೆ ಮಾದರಿಗಳನ್ನು ಗುರುತಿಸಿ", icon: "🏙️" },
+    { q: "ಸಸ್ಯವರ್ಗ ಸಾಂದ್ರತೆಯನ್ನು ವಿಶ್ಲೇಷಿಸಿ", icon: "🌿" },
+    { q: "ಕರಾವಳಿ ಸವೆತದ ನಕ್ಷೆ ಮಾಡಿ", icon: "🏖️" },
+    { q: "ಮೋಡ ಹೊದಿಕೆ ಶೇಕಡಾವಾರು ಪತ್ತೆ ಮಾಡಿ", icon: "☁️" },
+    { q: "ಕೃಷಿ ಕ್ಷೇತ್ರ ಗಡಿಗಳನ್ನು ಹುಡುಕಿ", icon: "🌾" },
+    { q: "ಈ ಪ್ರದೇಶದಲ್ಲಿ ಪ್ರವಾಹ ಹಾನಿಯನ್ನು ಮೌಲ್ಯಮಾಪನ ಮಾಡಿ", icon: "🌧️" },
+    { q: "ಅರಣ್ಯ ನಾಶದ ಮಾದರಿಗಳನ್ನು ಪತ್ತೆ ಮಾಡಿ", icon: "🌲" },
+    { q: "ಸೌರ ಫಾರ್ಮ್ ಸ್ಥಾಪನೆಗಳನ್ನು ಗುರುತಿಸಿ", icon: "☀️" },
+    { q: "ರಸ್ತೆ ಜಾಲ ಬದಲಾವಣೆಗಳನ್ನು ಕಂಡುಹಿಡಿಯಿರಿ", icon: "🛤️" },
+    { q: "ಹಿಮನದಿ ಹಿಮ್ಮೆಟ್ಟುವಿಕೆಯ ನಕ್ಷೆ ಮಾಡಿ", icon: "🧊" },
+    { q: "ರಾತ್ರಿ ಬೆಳಕಿನ ವಿತರಣೆಯನ್ನು ವಿಶ್ಲೇಷಿಸಿ", icon: "🌃" },
+    { q: "ಹಡಗು ಸಂಚಾರ ಮಾದರಿಗಳನ್ನು ಗುರುತಿಸಿ", icon: "🚢" },
+    { q: "ಕಾಡ್ಗಿಚ್ಚಿನ ತೀವ್ರತೆಯನ್ನು ಮೌಲ್ಯಮಾಪನ ಮಾಡಿ", icon: "🔥" },
+  ],
+};
+
+interface I18nContextType {
+  lang: Language;
+  setLang: (lang: Language) => void;
+  t: (key: string) => string;
+}
+
+const I18nContext = createContext<I18nContextType>({
+  lang: "en",
+  setLang: () => {},
+  t: (key: string) => key,
+});
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Language>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("satquery.lang") as Language;
+      if (saved && translations[saved]) return saved;
+    }
+    return "en";
+  });
+
+  const setLang = (newLang: Language) => {
+    setLangState(newLang);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("satquery.lang", newLang);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = lang;
+      document.documentElement.setAttribute("data-lang", lang);
+    }
+  }, [lang]);
+
+  const t = (key: string): string => {
+    return translations[lang]?.[key] || translations["en"]?.[key] || key;
+  };
+
+  return (
+    <I18nContext.Provider value={{ lang, setLang, t }}>
+      {children}
+    </I18nContext.Provider>
+  );
+}
+
+export function useI18n() {
+  return useContext(I18nContext);
+}

@@ -53,6 +53,25 @@ export interface ExecutionTrace {
   disagreement?: string | boolean;
 }
 
+export interface LandCoverMetrics {
+  vegetation_pre: number;
+  vegetation_post: number;
+  urban_pre: number;
+  urban_post: number;
+  water_pre: number;
+  water_post: number;
+  barren_pre: number;
+  barren_post: number;
+}
+
+export interface FeatureMetric {
+  category: string;
+  pre: number;
+  post: number;
+  isHighlighted?: boolean;
+  color?: string;
+}
+
 export interface ChangeResult {
   change_detected?: boolean;
   changed_area_percent?: number;
@@ -60,6 +79,8 @@ export interface ChangeResult {
   change_map_url?: string;
   regions?: BoundingBox[];
   confidence?: number;
+  land_cover?: LandCoverMetrics;
+  feature_metrics?: FeatureMetric[];
 }
 
 export interface OpticalSarResult {

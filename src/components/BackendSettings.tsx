@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Settings, CheckCircle2, AlertCircle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export function BackendSettings({ onChange }: { onChange?: (keys: any) => void }) {
   const [open, setOpen] = useState(false);
@@ -7,6 +8,7 @@ export function BackendSettings({ onChange }: { onChange?: (keys: any) => void }
   const [gradioUrl, setGradioUrl] = useState("");
   const [online, setOnline] = useState<boolean | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     const getStorage = (key: string) => typeof window !== "undefined" ? window.localStorage.getItem(key) : "";
@@ -41,61 +43,61 @@ export function BackendSettings({ onChange }: { onChange?: (keys: any) => void }
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex size-9 items-center justify-center rounded-full border border-[#E5E0D8] bg-[#FAF9F5] shadow-sm transition-all hover:bg-white"
+        className="flex size-9 items-center justify-center rounded-full border border-white/10 bg-white/5 shadow-sm transition-all hover:bg-white/10 backdrop-blur-sm"
       >
-        <Settings className="size-4.5 text-[#1F1E1B]" />
-        <div className="absolute -right-0.5 -top-0.5 rounded-full bg-white">
+        <Settings className="size-4.5 text-slate-300" />
+        <div className="absolute -right-0.5 -top-0.5 rounded-full bg-[#0c1428]">
           {online ? (
-            <CheckCircle2 className="size-3 text-[#3D7E5D]" />
+            <CheckCircle2 className="size-3 text-emerald-400" />
           ) : (
-            <AlertCircle className="size-3 text-[#D94636]" />
+            <AlertCircle className="size-3 text-red-400" />
           )}
         </div>
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-[#E5E0D8] bg-[#FFFFFF] p-5 shadow-[0_10px_40px_-10px_rgba(31,30,27,0.1)] max-h-[80vh] overflow-y-auto">
-          <h3 className="mb-4 text-sm font-bold text-[#1F1E1B] font-serif">Configuration</h3>
+        <div className="absolute right-0 z-50 mt-2 w-80 rounded-2xl border border-white/10 bg-[#0c1425]/95 backdrop-blur-xl p-5 shadow-2xl shadow-black/40 max-h-[80vh] overflow-y-auto">
+          <h3 className="mb-4 text-sm font-bold text-white font-serif">{t("settings.title")}</h3>
           
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#7D786F]">
-                Gemini API Key
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                {t("settings.geminiKey")}
               </label>
               <input
                 value={geminiKey}
                 type="password"
                 onChange={(e) => setGeminiKey(e.target.value)}
                 placeholder="AIzaSy..."
-                className="w-full rounded-xl border border-[#E5E0D8] bg-[#FAF9F5] p-2.5 font-mono text-sm text-[#1F1E1B] outline-none transition-colors focus:border-[#1F1E1B] focus:ring-1 focus:ring-[#1F1E1B]"
+                className="w-full rounded-xl border border-white/10 bg-white/5 p-2.5 font-mono text-sm text-white outline-none transition-colors focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 placeholder:text-slate-500"
               />
             </div>
             
             <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[#7D786F]">
-                GeoChat Gradio URL
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                {t("settings.gradioUrl")}
               </label>
               <input
                 value={gradioUrl}
                 type="url"
                 onChange={(e) => setGradioUrl(e.target.value)}
                 placeholder="https://...gradio.live"
-                className="w-full rounded-xl border border-[#E5E0D8] bg-[#FAF9F5] p-2.5 font-mono text-sm text-[#1F1E1B] outline-none transition-colors focus:border-[#1F1E1B] focus:ring-1 focus:ring-[#1F1E1B]"
+                className="w-full rounded-xl border border-white/10 bg-white/5 p-2.5 font-mono text-sm text-white outline-none transition-colors focus:border-cyan-400/50 focus:ring-1 focus:ring-cyan-400/30 placeholder:text-slate-500"
               />
             </div>
 
             <div className="pt-2 flex justify-end gap-2">
               <button
                 onClick={() => setOpen(false)}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-[#7D786F] hover:text-[#1F1E1B] transition-colors"
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-400 hover:text-white transition-colors"
               >
-                Cancel
+                {t("settings.cancel")}
               </button>
               <button
                 onClick={() => void save()}
-                className="rounded-xl bg-[#1F1E1B] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#4B473F] transition-colors"
+                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-400 transition-colors"
               >
-                Save
+                {t("settings.save")}
               </button>
             </div>
           </div>

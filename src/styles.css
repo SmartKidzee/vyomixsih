@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Earth Query Lens — Claude.ai Warm Aesthetic Design System.
- * Clean warm parchment backgrounds, pure white cards, crisp charcoal typography, and terracotta accents.
+ * Earth Query Lens — Deep Space Theme.
+ * Dark cosmic backgrounds, subtle star fields, nebula accents, clean typography.
  */
 
 @theme inline {
@@ -40,7 +40,7 @@
   --color-panel: var(--panel);
   --color-grid: var(--grid);
   --font-display: "Newsreader", Georgia, serif;
-  --font-sans: "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", "Noto Sans Kannada", "Noto Sans Devanagari", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-serif: "Newsreader", Georgia, serif;
 }
@@ -48,44 +48,44 @@
 :root {
   --radius: 0.75rem;
   
-  /* Claude Warm Parchment / Oat background */
-  --background: #FAF9F5;
-  --foreground: #1F1E1B;
+  /* Deep space dark backgrounds */
+  --background: #060b18;
+  --foreground: #e4e8f0;
   
-  /* Pure white cards */
-  --card: #FFFFFF;
-  --card-foreground: #1F1E1B;
-  --panel: #FFFFFF;
-  --popover: #FFFFFF;
-  --popover-foreground: #1F1E1B;
+  /* Dark glass cards */
+  --card: rgba(12, 20, 40, 0.85);
+  --card-foreground: #e4e8f0;
+  --panel: rgba(12, 20, 40, 0.85);
+  --popover: #0c1428;
+  --popover-foreground: #e4e8f0;
   
-  /* Claude signature Terracotta */
-  --primary: #CC5A37;
-  --primary-foreground: #FFFFFF;
+  /* Cyan/teal space accent */
+  --primary: #38bdf8;
+  --primary-foreground: #020617;
   
-  /* Warm secondary grays */
-  --secondary: #F2EFEA;
-  --secondary-foreground: #4B473F;
+  /* Deep space secondary */
+  --secondary: rgba(30, 45, 80, 0.6);
+  --secondary-foreground: #94a3b8;
   
-  --muted: #F5F2EB;
-  --muted-foreground: #7D786F;
+  --muted: rgba(30, 45, 80, 0.4);
+  --muted-foreground: #64748b;
   
-  --accent: #F2EFEA;
-  --accent-foreground: #1F1E1B;
+  --accent: rgba(56, 189, 248, 0.1);
+  --accent-foreground: #e4e8f0;
   
-  --destructive: #D94636;
-  --destructive-foreground: #FFFFFF;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
   
-  --warning: #B45309;
-  --warning-foreground: #FFFBEB;
+  --warning: #f59e0b;
+  --warning-foreground: #1e1b4b;
   
-  --success: #3D7E5D;
+  --success: #10b981;
   
-  /* Warm borders */
-  --border: #E5E0D8;
-  --input: #E5E0D8;
-  --ring: #CC5A37;
-  --grid: rgba(31, 30, 27, 0.04);
+  /* Faint borders */
+  --border: rgba(148, 163, 184, 0.12);
+  --input: rgba(148, 163, 184, 0.12);
+  --ring: #38bdf8;
+  --grid: rgba(148, 163, 184, 0.04);
 }
 
 @layer base {
@@ -99,13 +99,9 @@
   }
 
   body {
-    background-color: var(--color-background);
+    background-color: var(--background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    background-image:
-      radial-gradient(circle at 50% -5%, oklch(0.93 0.03 210 / 80%), transparent 60%),
-      radial-gradient(circle at 10% 40%, oklch(0.88 0.03 200 / 50%), transparent 40%),
-      radial-gradient(circle at 90% 70%, oklch(0.88 0.03 220 / 50%), transparent 40%);
     -webkit-font-smoothing: antialiased;
   }
 
@@ -114,13 +110,129 @@
   h3 {
     letter-spacing: -0.01em;
   }
+
+  [lang="kn"] *, [lang="hi"] *,
+  .lang-kn *, .lang-hi * {
+    letter-spacing: normal !important;
+  }
+}
+
+/* Stars background layer */
+.space-bg {
+  position: relative;
+  background: 
+    radial-gradient(ellipse at 20% 50%, rgba(56, 189, 248, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, 0.03) 0%, transparent 50%),
+    linear-gradient(180deg, #060b18 0%, #0a1628 50%, #060b18 100%);
+}
+
+/* Star field animation */
+.stars-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.stars-layer::before,
+.stars-layer::after {
+  content: "";
+  position: absolute;
+  inset: -50%;
+  background-image: 
+    radial-gradient(1px 1px at 20px 30px, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 40px 70px, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1.5px 1.5px at 90px 40px, rgba(255,255,255,0.5), transparent),
+    radial-gradient(1px 1px at 130px 80px, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1.2px 1.2px at 160px 30px, rgba(255,255,255,0.35), transparent),
+    radial-gradient(1px 1px at 200px 90px, rgba(255,255,255,0.25), transparent),
+    radial-gradient(1.5px 1.5px at 250px 50px, rgba(255,255,255,0.45), transparent),
+    radial-gradient(1px 1px at 300px 20px, rgba(255,255,255,0.3), transparent),
+    radial-gradient(1.2px 1.2px at 350px 70px, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1px 1px at 400px 40px, rgba(255,255,255,0.2), transparent),
+    radial-gradient(1px 1px at 450px 80px, rgba(255,255,255,0.35), transparent),
+    radial-gradient(1.5px 1.5px at 500px 20px, rgba(255,255,255,0.3), transparent);
+  background-size: 550px 100px;
+  animation: drift 120s linear infinite;
+}
+
+.stars-layer::after {
+  background-size: 350px 120px;
+  animation-duration: 90s;
+  animation-direction: reverse;
+  opacity: 0.6;
+}
+
+@keyframes drift {
+  from { transform: translateY(0); }
+  to { transform: translateY(100px); }
+}
+
+/* Twinkling star effect */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* Greeting animation */
+@keyframes greeting-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.animate-greeting {
+  animation: greeting-fade-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Greeting character stagger animation */
+@keyframes char-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.9);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.animate-word {
+  display: inline-block;
+  animation: greeting-fade-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 0;
+}
+
+/* Floating glow pulse for the location pin */
+@keyframes glow-pulse {
+  0%, 100% { 
+    box-shadow: 0 0 8px 2px rgba(56, 189, 248, 0.3);
+  }
+  50% { 
+    box-shadow: 0 0 20px 6px rgba(56, 189, 248, 0.5);
+  }
+}
+
+.location-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
 }
 
 @utility panel {
   background-color: var(--color-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-2xl);
-  box-shadow: 0 10px 30px -10px rgba(15, 25, 40, 0.05), 0 4px 12px -2px rgba(15, 25, 40, 0.02);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3), 0 4px 12px -2px rgba(0, 0, 0, 0.15);
 }
 
 @utility label-mono {
@@ -142,7 +254,7 @@
 @utility nav-link {
   font-size: 0.9375rem;
   font-weight: 500;
-  color: oklch(0.35 0.04 240);
+  color: var(--color-muted-foreground);
   padding-bottom: 0.5rem;
   border-bottom: 2px solid transparent;
   transition: color 150ms ease, border-color 150ms ease;
@@ -158,7 +270,56 @@
 }
 
 @utility earth-glow {
-  filter: drop-shadow(0 20px 40px rgba(15, 40, 70, 0.18));
+  filter: drop-shadow(0 20px 40px rgba(56, 189, 248, 0.15));
 }
 
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.25);
+}
+
+/* Markdown prose styling for dark theme */
+.prose-space {
+  color: #e4e8f0;
+}
+
+.prose-space strong {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.prose-space code {
+  background: rgba(30, 45, 80, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.85em;
+}
+
+.prose-space a {
+  color: #38bdf8;
+  text-decoration: underline;
+  text-decoration-color: rgba(56, 189, 248, 0.3);
+}
+
+.prose-space ul, .prose-space ol {
+  padding-left: 1.25em;
+}
+
+.prose-space li {
+  margin: 0.25em 0;
+}
