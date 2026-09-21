@@ -70,11 +70,28 @@ export interface FeatureMetric {
   post: number;
   isHighlighted?: boolean;
   color?: string;
+  delta?: number;
+  // Physical ground area metrics
+  preAreaKm2?: number;
+  postAreaKm2?: number;
+  deltaAreaKm2?: number;
+  preSqM?: number;
+  postSqM?: number;
+  deltaSqM?: number;
+  preSqFt?: number;
+  postSqFt?: number;
+  deltaSqFt?: number;
+  actionText?: string;
+  formattedMetric?: string;
+  formattedImperial?: string;
 }
 
 export interface ChangeResult {
   change_detected?: boolean;
   changed_area_percent?: number;
+  changed_area_km2?: number;
+  changed_area_sqft?: number;
+  total_viewport_area_km2?: number;
   description?: string;
   change_map_url?: string;
   regions?: BoundingBox[];

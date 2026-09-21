@@ -14,7 +14,7 @@ export const getApiKeys = (): string[] => {
   return keys;
 };
 
-const getApiKey = () => {
+export const getApiKey = () => {
   const keys = getApiKeys();
   return keys[0] || undefined;
 };
@@ -29,6 +29,17 @@ export const setApiKey = (key: string) => {
     window.localStorage.removeItem("satquery.apikey");
   }
 };
+
+export const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-1.5-flash-8b",
+  "gemini-1.5-pro",
+  "gemini-3.7-flash",
+  "gemini-3.6-flash"
+];
 
 async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -152,39 +163,44 @@ Only output the JSON object without any markdown wrappers.`
     generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
   };
 
-  const modelsToTry = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
+  const modelsToTry = GEMINI_MODELS;
   let response;
   let lastErrorText = "Unknown API Error";
   let lastStatus = 500;
 
-  let successfulModel = "gemini-3.6-flash";
+  let successfulModel = "gemini-2.5-flash";
 
-  for (const model of modelsToTry) {
-    try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: signal ?? null
-      });
+  const allApiKeys = getApiKeys();
+  const keysToAttempt = allApiKeys.length > 0 ? allApiKeys : [apiKey];
 
-      if (response.ok) {
-        successfulModel = model;
-        break;
-      } else {
-        lastErrorText = await response.text();
-        lastStatus = response.status;
-        // Only fallback if the error is 404 (Not Found), 503 (Unavailable), or 429 (Rate Limit)
-        if (![404, 503, 429].includes(lastStatus)) {
-          break; 
+  for (const currentKey of keysToAttempt) {
+    for (const model of modelsToTry) {
+      try {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: signal ?? null
+        });
+
+        if (response.ok) {
+          successfulModel = model;
+          break;
+        } else {
+          lastErrorText = await response.text();
+          lastStatus = response.status;
+          // If quota limit (429), try next key or fallback model
+          if (![404, 503, 429].includes(lastStatus)) {
+            break; 
+          }
         }
+      } catch (err: any) {
+        if (err.name === 'AbortError') throw err;
+        lastErrorText = err.message || "Network Error";
+        lastStatus = 0;
       }
-    } catch (err: any) {
-      // Handle network errors or aborts
-      if (err.name === 'AbortError') throw err;
-      lastErrorText = err.message || "Network Error";
-      lastStatus = 0;
     }
+    if (response && response.ok) break;
   }
 
   if (!response || !response.ok) {
@@ -282,31 +298,89 @@ Only output the JSON object without any markdown wrappers.`
   return parsedResponse;
 }
 
-export async function generateChatTitle(query: string, apiKey: string): Promise<string> {
-  if (!apiKey || !query.trim()) return query.slice(0, 30);
-  const modelsToTry = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
-  
-  for (const model of modelsToTry) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Generate a very short, concise 3-4 word title for this chat based on the following user query. ONLY output the title, no quotes, no extra text. Query: "${query}"` }] }],
-          generationConfig: { temperature: 0.7 }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.candidates && data.candidates[0].content.parts[0].text) {
-          return data.candidates[0].content.parts[0].text.replace(/["*]/g, '').trim();
-        }
-      }
-    } catch (e) {
-      console.warn(`Failed to generate chat title with ${model}`, e);
+/**
+ * Deterministic intelligent title generator that always produces a meaningful
+ * descriptive title from query context without showing generic 'New Chat'.
+ */
+export function extractSmartFallbackTitle(query: string): string {
+  if (!query || !query.trim()) return "Satellite Analysis";
+  const q = query.trim();
+
+  // Bi-temporal comparison detection
+  if (/bi-temporal|change detection|comparing|baseline|observation/i.test(q)) {
+    const years = q.match(/\b(20\d\d)\b/g);
+    if (years && years.length >= 2) {
+      return `${years[0]} vs ${years[1]} Change`;
+    } else if (years && years.length === 1) {
+      return `${years[0]} vs Present Change`;
+    }
+    return "Satellite Change Study";
+  }
+
+  // Location / coordinates detection
+  const coordMatch = q.match(/\[([0-9.-]+),\s*([0-9.-]+)\]/);
+  if (coordMatch && coordMatch[1] && coordMatch[2]) {
+    const lat = parseFloat(coordMatch[1]);
+    const lon = parseFloat(coordMatch[2]);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      return `Region [${lat.toFixed(2)}, ${lon.toFixed(2)}]`;
     }
   }
-  return query.slice(0, 30);
+
+  // Topic keywords
+  if (/urban|building|construct|city|settlement/i.test(q)) return "Urban Footprint Study";
+  if (/forest|vegetation|tree|deforest|canopy/i.test(q)) return "Vegetation & Canopy";
+  if (/flood|water|river|lake|ocean|sea/i.test(q)) return "Water & Flood Survey";
+  if (/agriculture|crop|field|farm/i.test(q)) return "Agricultural Crop Survey";
+  if (/sar|optical|multimodal/i.test(q)) return "SAR & Optical Study";
+
+  // Meaningful first 3-4 words
+  const words = q.split(/\s+/).filter(w => w.length > 2 && !/^(the|and|for|with|from|this|that|please|analyze|show)$/i.test(w));
+  if (words.length > 0) {
+    return words.slice(0, 4).join(" ");
+  }
+
+  return "Satellite Analysis";
+}
+
+/**
+ * Generate a concise 2-4 word title using AI with fallback key handling and smart extraction.
+ */
+export async function generateChatTitle(query: string, apiKeyOverride?: string): Promise<string> {
+  const keys = getApiKeys();
+  const activeKeys = apiKeyOverride ? [apiKeyOverride, ...keys.filter(k => k !== apiKeyOverride)] : keys;
+
+  if (activeKeys.length === 0 || !query.trim()) {
+    return extractSmartFallbackTitle(query);
+  }
+
+  const promptText = `Generate an ultra-concise 2-4 word title for this satellite chat query. Query: "${query.slice(0, 250)}". Respond with ONLY the 2-4 word title, no quotes, no markdown.`;
+
+  for (const key of activeKeys) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 25 }
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const title = data.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/["*#.]/g, '').trim();
+          if (title && title.length >= 2 && title.length <= 40) {
+            return title;
+          }
+        }
+      } catch (e) {
+        // Try next model or fallback key
+      }
+    }
+  }
+
+  return extractSmartFallbackTitle(query);
 }
 
 const LANG_NAMES: Record<string, string> = {
@@ -317,29 +391,30 @@ const LANG_NAMES: Record<string, string> = {
 export async function translateText(text: string, targetLang: string): Promise<string> {
   if (!text || targetLang === "en") return text;
   
-  const apiKey = getApiKey();
-  if (!apiKey) return text;
+  const keys = getApiKeys();
+  if (keys.length === 0) return text;
   
   const langName = LANG_NAMES[targetLang] || targetLang;
-  const modelsToTry = ["gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"];
   
-  for (const model of modelsToTry) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Translate the following text to ${langName}. Output ONLY the translated text, no explanations, no quotes, no prefix. Preserve markdown formatting.\n\n${text}` }] }],
-          generationConfig: { temperature: 0.1 }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const translated = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (translated) return translated.trim();
+  for (const key of keys) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `Translate the following text to ${langName}. Output ONLY the translated text, no explanations, no quotes, no prefix. Preserve markdown formatting.\n\n${text}` }] }],
+            generationConfig: { temperature: 0.1 }
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const translated = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (translated) return translated.trim();
+        }
+      } catch (e) {
+        // Try next
       }
-    } catch (e) {
-      console.warn(`Translation failed with ${model}`, e);
     }
   }
   return text; // Fallback to original

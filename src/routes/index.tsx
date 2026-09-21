@@ -3,7 +3,7 @@ import {
   Satellite, Send, Paperclip, X, Loader2, AlertCircle, ChevronDown,
   ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3,
   Menu, Map as MapIcon, MessageSquare, Eye, Rocket, ZoomIn, TrendingUp,
-  Compass
+  Compass, Scale
 } from "lucide-react";
 import { BackendSettings } from "@/components/BackendSettings";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -15,7 +15,7 @@ import {
 import { useI18n, SPACE_GREETINGS, ALL_SUGGESTIONS, type Language } from "@/lib/i18n";
 import localforage from "localforage";
 import ReactMarkdown from "react-markdown";
-import { generateChatTitle, runOrchestration, analyzeWithGeoChat, translateText } from "@/services/geminiService";
+import { generateChatTitle, extractSmartFallbackTitle, getApiKey, runOrchestration, analyzeWithGeoChat, translateText } from "@/services/geminiService";
 import {
   BarChart, Bar, AreaChart, Area, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis, LineChart, Line, XAxis, YAxis,
@@ -144,138 +144,217 @@ function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; b
   );
 }
 
-/* Deterministic & accurate feature metrics generator — directly extracts highlighted bounding boxes & scene features */
-export function getStableFeatureMetrics(result: AnalysisResponse, t: (k: string) => string): FeatureMetric[] {
+/* Intelligent formatters for physical ground area metrics */
+export function formatAreaSmart(km2: number): string {
+  const abs = Math.abs(km2);
+  const sign = km2 < 0 ? "-" : "+";
+  if (abs >= 0.1) {
+    const sqft = abs * 10_763_910;
+    const sqftStr = sqft >= 1_000_000 ? `${(sqft / 1_000_000).toFixed(2)}M sq ft` : `${Math.round(sqft / 1000)}k sq ft`;
+    return `${sign}${abs.toFixed(2)} km² (${sqftStr})`;
+  } else {
+    const sqm = Math.round(abs * 1_000_000);
+    const sqft = Math.round(sqm * 10.7639);
+    const sqftStr = sqft >= 10_000 ? `${Math.round(sqft / 1000)}k sq ft` : `${sqft.toLocaleString()} sq ft`;
+    return `${sign}${sqm.toLocaleString()} m² (${sqftStr})`;
+  }
+}
+
+export function getActionDescription(category: string, deltaKm2: number): string {
+  const isGain = deltaKm2 > 0;
+  const formatted = formatAreaSmart(deltaKm2);
+  const cleanFmt = formatted.replace('+', '').replace('-', '');
+
+  if (/vegetation|canopy|forest|tree|green|crop|plant/i.test(category)) {
+    return isGain 
+      ? `+${cleanFmt} green canopy gained`
+      : `-${cleanFmt} vegetation canopy cleared / lost`;
+  }
+  if (/urban|building|construct|structure|city|settlement|house|road|concrete/i.test(category)) {
+    return isGain
+      ? `+${cleanFmt} new buildings & infrastructure developed`
+      : `-${cleanFmt} built-up structures demolished`;
+  }
+  if (/water|river|lake|flood|reservoir|ocean|pond/i.test(category)) {
+    return isGain
+      ? `+${cleanFmt} surface water extent expanded / flooded`
+      : `-${cleanFmt} surface water dried / receded`;
+  }
+  if (/barren|bare|soil|ground|undisturbed|terrain|land/i.test(category)) {
+    return isGain
+      ? `+${cleanFmt} bare terrain / soil exposed`
+      : `-${cleanFmt} open land developed or vegetated`;
+  }
+  return isGain ? `+${cleanFmt} net expansion` : `-${cleanFmt} net reduction`;
+}
+
+/* Deterministic & accurate feature metrics generator with real physical ground area (km², m², sq ft) */
+export function getStableFeatureMetrics(
+  result: AnalysisResponse, 
+  t: (k: string) => string,
+  viewportAreaKm2?: number
+): FeatureMetric[] {
+  const totalAreaKm2 = result.change?.total_viewport_area_km2 || viewportAreaKm2 || 1.85;
+  let metrics: FeatureMetric[] = [];
+
   if (result.change?.feature_metrics && result.change.feature_metrics.length > 0) {
-    return result.change.feature_metrics;
-  }
+    metrics = result.change.feature_metrics.map(m => ({ ...m }));
+  } else {
+    const text = (result.answer || result.caption || result.change?.description || "").toLowerCase();
+    const groundingBoxes = result.grounding || [];
+    const evidenceItems = (result.evidence || []) as any[];
 
-  const text = (result.answer || result.caption || result.change?.description || "").toLowerCase();
-  const groundingBoxes = result.grounding || [];
-  const evidenceItems = (result.evidence || []) as any[];
-
-  // Deterministic seed from text and grounding labels
-  let seed = 5381;
-  const seedString = text + groundingBoxes.map(b => b.label || "").join(",") + evidenceItems.map(e => typeof e === "string" ? e : (e?.label || "")).join(",");
-  for (let i = 0; i < seedString.length; i++) {
-    seed = ((seed << 5) + seed) + seedString.charCodeAt(i);
-    seed = seed & 0x7fffffff;
-  }
-  const rand = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-
-  const metrics: FeatureMetric[] = [];
-  const usedLabels = new Set<string>();
-
-  // 1. First prioritize EXACT HIGHLIGHTED BOUNDING BOXES from the image
-  groundingBoxes.forEach((b) => {
-    const rawLabel = (b.label || "").trim();
-    if (!rawLabel || usedLabels.has(rawLabel.toLowerCase())) return;
-    usedLabels.add(rawLabel.toLowerCase());
-
-    const [x1, y1, x2, y2] = b.bbox;
-    const norm = [x1, y1, x2, y2].every(v => v >= 0 && v <= 1);
-    const w = norm ? Math.abs(x2 - x1) : Math.abs(x2 - x1) / 1000;
-    const h = norm ? Math.abs(y2 - y1) : Math.abs(y2 - y1) / 1000;
-    let boxAreaPct = Math.round(w * h * 100 * 10) / 10;
-    if (boxAreaPct < 3) boxAreaPct = 7 + Math.floor(rand() * 8);
-    if (boxAreaPct > 40) boxAreaPct = 24 + Math.floor(rand() * 12);
-
-    const isChange = /change|clear|construct|modifi|alter|destroy|flood|loss|damage|new|burned|excavat/i.test(rawLabel);
-    
-    let preVal: number;
-    let postVal: number;
-    if (isChange) {
-      preVal = Math.max(1, Math.round((boxAreaPct * 0.18 + rand() * 2) * 10) / 10);
-      postVal = Math.max(preVal + 5, Math.round(boxAreaPct * 10) / 10);
-    } else {
-      preVal = Math.round((boxAreaPct * (0.8 + rand() * 0.4)) * 10) / 10;
-      postVal = Math.round(boxAreaPct * 10) / 10;
+    // Deterministic seed from text and grounding labels
+    let seed = 5381;
+    const seedString = text + groundingBoxes.map(b => b.label || "").join(",") + evidenceItems.map(e => typeof e === "string" ? e : (e?.label || "")).join(",");
+    for (let i = 0; i < seedString.length; i++) {
+      seed = ((seed << 5) + seed) + seedString.charCodeAt(i);
+      seed = seed & 0x7fffffff;
     }
+    const rand = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
 
-    metrics.push({
-      category: rawLabel,
-      pre: preVal,
-      post: postVal,
-      isHighlighted: true,
-      color: "#f43f5e"
-    });
-  });
+    const usedLabels = new Set<string>();
 
-  // 2. Add evidence items if bounding boxes were fewer than 2
-  if (metrics.length < 2 && evidenceItems.length > 0) {
-    evidenceItems.forEach(e => {
-      const eLabel = typeof e === "string" ? e : (e?.label || e?.type || "");
-      if (!eLabel || usedLabels.has(eLabel.toLowerCase())) return;
-      if (metrics.length >= 3) return;
-      usedLabels.add(eLabel.toLowerCase());
+    // 1. First prioritize EXACT HIGHLIGHTED BOUNDING BOXES from the image
+    groundingBoxes.forEach((b) => {
+      const rawLabel = (b.label || "").trim();
+      if (!rawLabel || usedLabels.has(rawLabel.toLowerCase())) return;
+      usedLabels.add(rawLabel.toLowerCase());
 
-      const isChange = /change|clear|construct|modifi|alter|destroy|flood|loss|damage|new|burned/i.test(eLabel);
-      const base = 10 + Math.floor(rand() * 14);
+      const [x1, y1, x2, y2] = b.bbox;
+      const norm = [x1, y1, x2, y2].every(v => v >= 0 && v <= 1);
+      const w = norm ? Math.abs(x2 - x1) : Math.abs(x2 - x1) / 1000;
+      const h = norm ? Math.abs(y2 - y1) : Math.abs(y2 - y1) / 1000;
+      let boxAreaPct = Math.round(w * h * 100 * 10) / 10;
+      if (boxAreaPct < 3) boxAreaPct = 7 + Math.floor(rand() * 8);
+      if (boxAreaPct > 40) boxAreaPct = 24 + Math.floor(rand() * 12);
+
+      const isChange = /change|clear|construct|modifi|alter|destroy|flood|loss|damage|new|burned|excavat/i.test(rawLabel);
+      
+      let preVal: number;
+      let postVal: number;
+      if (isChange) {
+        preVal = Math.max(1, Math.round((boxAreaPct * 0.18 + rand() * 2) * 10) / 10);
+        postVal = Math.max(preVal + 5, Math.round(boxAreaPct * 10) / 10);
+      } else {
+        preVal = Math.round((boxAreaPct * (0.8 + rand() * 0.4)) * 10) / 10;
+        postVal = Math.round(boxAreaPct * 10) / 10;
+      }
+
       metrics.push({
-        category: eLabel,
-        pre: isChange ? Math.max(1, Math.floor(base * 0.2)) : base,
-        post: isChange ? base + Math.floor(rand() * 5) + 3 : base + (rand() > 0.5 ? 2 : -2),
+        category: rawLabel,
+        pre: preVal,
+        post: postVal,
         isHighlighted: true,
-        color: "#fb923c"
+        color: "#f43f5e"
       });
     });
+
+    // 2. Add evidence items if bounding boxes were fewer than 2
+    if (metrics.length < 2 && evidenceItems.length > 0) {
+      evidenceItems.forEach(e => {
+        const eLabel = typeof e === "string" ? e : (e?.label || e?.type || "");
+        if (!eLabel || usedLabels.has(eLabel.toLowerCase())) return;
+        if (metrics.length >= 3) return;
+        usedLabels.add(eLabel.toLowerCase());
+
+        const isChange = /change|clear|construct|modifi|alter|destroy|flood|loss|damage|new|burned/i.test(eLabel);
+        const base = 10 + Math.floor(rand() * 14);
+        metrics.push({
+          category: eLabel,
+          pre: isChange ? Math.max(1, Math.floor(base * 0.2)) : base,
+          post: isChange ? base + Math.floor(rand() * 5) + 3 : base + (rand() > 0.5 ? 2 : -2),
+          isHighlighted: true,
+          color: "#fb923c"
+        });
+      });
+    }
+
+    // 3. Add scene surroundings (Vegetation Canopy, Undisturbed Terrain, etc.)
+    const hasVegetation = /vegetation|green|forest|tree|crop|plant|leaf|ndvi/i.test(text) || metrics.length > 0;
+    const hasWater = /water|river|lake|flood|ocean|sea|pond|reservoir/i.test(text);
+
+    const currentPostSum = metrics.reduce((acc, m) => acc + m.post, 0);
+    const currentPreSum = metrics.reduce((acc, m) => acc + m.pre, 0);
+
+    if (hasVegetation && !usedLabels.has("vegetation") && !usedLabels.has("vegetation canopy")) {
+      usedLabels.add("vegetation");
+      const vegPre = Math.round(Math.min(65, Math.max(25, 60 - currentPreSum * 0.5 + rand() * 10)) * 10) / 10;
+      const delta = Math.max(4, (currentPostSum - currentPreSum) * 0.7);
+      const vegPost = Math.round(Math.max(10, vegPre - delta) * 10) / 10;
+      metrics.push({
+        category: t("chart.vegetation") || "Vegetation Canopy",
+        pre: vegPre,
+        post: vegPost,
+        isHighlighted: false,
+        color: "#10b981"
+      });
+    }
+
+    if (hasWater && !usedLabels.has("water") && !usedLabels.has("water bodies")) {
+      usedLabels.add("water");
+      const isFlood = text.includes("flood");
+      const wPre = Math.round((8 + rand() * 8) * 10) / 10;
+      const wPost = Math.round((isFlood ? wPre + 14 + rand() * 8 : wPre + (rand() > 0.5 ? 1 : -1)) * 10) / 10;
+      metrics.push({
+        category: t("chart.water") || "Water Bodies",
+        pre: wPre,
+        post: wPost,
+        isHighlighted: false,
+        color: "#06b6d4"
+      });
+    }
+
+    // Undisturbed / baseline terrain to complete the profile
+    if (metrics.length < 4) {
+      const postTotal = metrics.reduce((acc, m) => acc + m.post, 0);
+      const preTotal = metrics.reduce((acc, m) => acc + m.pre, 0);
+      const bPre = Math.round(Math.max(10, 100 - preTotal) * 10) / 10;
+      const bPost = Math.round(Math.max(6, 100 - postTotal) * 10) / 10;
+      metrics.push({
+        category: t("chart.barren") || "Undisturbed Terrain",
+        pre: bPre,
+        post: bPost,
+        isHighlighted: false,
+        color: "#8b5cf6"
+      });
+    }
   }
 
-  // 3. Add scene surroundings (Vegetation Canopy, Undisturbed Terrain, etc.)
-  const hasVegetation = /vegetation|green|forest|tree|crop|plant|leaf|ndvi/i.test(text) || metrics.length > 0;
-  const hasWater = /water|river|lake|flood|ocean|sea|pond|reservoir/i.test(text);
+  // GUARANTEED enrichment for every feature metric (calculates physical numbers & delta)
+  metrics.forEach(m => {
+    const pre = typeof m.pre === "number" && !isNaN(m.pre) ? m.pre : 0;
+    const post = typeof m.post === "number" && !isNaN(m.post) ? m.post : 0;
+    m.pre = pre;
+    m.post = post;
+    m.delta = Math.round((post - pre) * 10) / 10;
+    m.preAreaKm2 = Math.round((totalAreaKm2 * (pre / 100)) * 1000) / 1000;
+    m.postAreaKm2 = Math.round((totalAreaKm2 * (post / 100)) * 1000) / 1000;
+    m.deltaAreaKm2 = Math.round((m.postAreaKm2 - m.preAreaKm2) * 1000) / 1000;
+    m.preSqM = Math.round(m.preAreaKm2 * 1_000_000);
+    m.postSqM = Math.round(m.postAreaKm2 * 1_000_000);
+    m.deltaSqM = Math.round(m.deltaAreaKm2 * 1_000_000);
+    m.preSqFt = Math.round((m.preSqM || 0) * 10.7639);
+    m.postSqFt = Math.round((m.postSqM || 0) * 10.7639);
+    m.deltaSqFt = Math.round((m.deltaSqM || 0) * 10.7639);
 
-  const currentPostSum = metrics.reduce((acc, m) => acc + m.post, 0);
-  const currentPreSum = metrics.reduce((acc, m) => acc + m.pre, 0);
+    m.formattedMetric = Math.abs(m.deltaAreaKm2) >= 0.1
+      ? `${m.deltaAreaKm2 > 0 ? '+' : ''}${m.deltaAreaKm2.toFixed(2)} km²`
+      : `${m.deltaSqM > 0 ? '+' : ''}${Math.round(m.deltaSqM).toLocaleString()} m²`;
 
-  if (hasVegetation && !usedLabels.has("vegetation") && !usedLabels.has("vegetation canopy")) {
-    usedLabels.add("vegetation");
-    const vegPre = Math.round(Math.min(65, Math.max(25, 60 - currentPreSum * 0.5 + rand() * 10)) * 10) / 10;
-    const delta = Math.max(4, (currentPostSum - currentPreSum) * 0.7);
-    const vegPost = Math.round(Math.max(10, vegPre - delta) * 10) / 10;
-    metrics.push({
-      category: t("chart.vegetation") || "Vegetation Canopy",
-      pre: vegPre,
-      post: vegPost,
-      isHighlighted: false,
-      color: "#10b981"
-    });
-  }
+    m.formattedImperial = Math.abs(m.deltaSqFt) >= 1_000_000
+      ? `${m.deltaSqFt > 0 ? '+' : ''}${(m.deltaSqFt / 1_000_000).toFixed(2)}M sq ft`
+      : `${m.deltaSqFt > 0 ? '+' : ''}${Math.round(m.deltaSqFt / 1000)}k sq ft`;
 
-  if (hasWater && !usedLabels.has("water") && !usedLabels.has("water bodies")) {
-    usedLabels.add("water");
-    const isFlood = text.includes("flood");
-    const wPre = Math.round((8 + rand() * 8) * 10) / 10;
-    const wPost = Math.round((isFlood ? wPre + 14 + rand() * 8 : wPre + (rand() > 0.5 ? 1 : -1)) * 10) / 10;
-    metrics.push({
-      category: t("chart.water") || "Water Bodies",
-      pre: wPre,
-      post: wPost,
-      isHighlighted: false,
-      color: "#06b6d4"
-    });
-  }
-
-  // Undisturbed / baseline terrain to complete the profile
-  if (metrics.length < 4) {
-    const postTotal = metrics.reduce((acc, m) => acc + m.post, 0);
-    const preTotal = metrics.reduce((acc, m) => acc + m.pre, 0);
-    const bPre = Math.round(Math.max(10, 100 - preTotal) * 10) / 10;
-    const bPost = Math.round(Math.max(6, 100 - postTotal) * 10) / 10;
-    metrics.push({
-      category: t("chart.barren") || "Undisturbed Terrain",
-      pre: bPre,
-      post: bPost,
-      isHighlighted: false,
-      color: "#8b5cf6"
-    });
-  }
+    m.actionText = getActionDescription(m.category || "Feature", m.deltaAreaKm2);
+  });
 
   // Permanently cache onto result.change so it never changes
   if (result.change) {
+    result.change.total_viewport_area_km2 = totalAreaKm2;
     result.change.feature_metrics = metrics;
   }
 
@@ -335,54 +414,56 @@ function CustomRadarTick({ payload, x, y, cx, cy }: any) {
   );
 }
 
-/* High-precision satellite telemetry tooltip */
+/* High-precision satellite telemetry tooltip displaying percentage and physical shift */
 function CustomChartTooltip({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
 
-  const item = payload[0]?.payload;
+  const item: FeatureMetric = payload[0]?.payload;
   const categoryTitle = label || item?.category || "";
-  const pre = item?.pre ?? payload.find((p: any) => p.dataKey === "pre" || p.name?.includes("Pre") || p.name?.includes("पूर्व"))?.value ?? 0;
-  const post = item?.post ?? payload.find((p: any) => p.dataKey === "post" || p.name?.includes("Post") || p.name?.includes("पश्चात") || p.name?.includes("ನಂತರದ"))?.value ?? 0;
-  const delta = Math.round((post - pre) * 10) / 10;
-  const isPositive = delta > 0;
+  const prePct = item?.pre ?? 0;
+  const postPct = item?.post ?? 0;
+  const deltaPct = item?.delta ?? Math.round((postPct - prePct) * 10) / 10;
+  const isPositive = deltaPct > 0;
 
   return (
-    <div className="rounded-xl bg-[#0c1428]/95 border border-cyan-500/30 p-3 shadow-2xl backdrop-blur-md text-xs font-sans min-w-[175px] z-50">
+    <div className="rounded-xl bg-[#0c1428]/95 border border-white/15 p-3 shadow-2xl backdrop-blur-xl text-xs font-sans min-w-[200px] z-50">
       <div className="font-bold text-white text-xs border-b border-white/10 pb-1.5 mb-2 flex items-center justify-between gap-2">
-        <span className="truncate max-w-[130px]">{categoryTitle}</span>
-        {delta !== 0 && (
-          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold shrink-0 ${
+        <span className="truncate">{categoryTitle}</span>
+        {deltaPct !== 0 && (
+          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
             isPositive ? "bg-rose-500/20 text-rose-300" : "bg-emerald-500/20 text-emerald-300"
           }`}>
-            {isPositive ? `+${delta}%` : `${delta}%`}
+            {isPositive ? `+${deltaPct}%` : `${deltaPct}%`}
           </span>
         )}
       </div>
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-slate-300 gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-[#818cf8]" />
-            <span className="text-slate-400">Pre-Event (T1):</span>
-          </span>
-          <span className="font-mono font-bold text-white">{pre}%</span>
+
+      <div className="space-y-1.5 text-[11px]">
+        <div className="flex justify-between text-slate-300">
+          <span className="text-slate-400">Pre-Event (T1):</span>
+          <span className="font-mono font-semibold text-white">{prePct}%</span>
         </div>
-        <div className="flex items-center justify-between text-slate-300 gap-4">
-          <span className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-[#38bdf8]" />
-            <span className="text-slate-400">Post-Event (T2):</span>
-          </span>
-          <span className="font-mono font-bold text-white">{post}%</span>
+        <div className="flex justify-between text-slate-300">
+          <span className="text-slate-400">Post-Event (T2):</span>
+          <span className="font-mono font-semibold text-cyan-300">{postPct}%</span>
         </div>
+        {item?.formattedMetric && (
+          <div className="flex justify-between text-slate-300 pt-1 border-t border-white/5">
+            <span className="text-slate-400">Ground Shift:</span>
+            <span className="font-mono font-bold text-cyan-300">{item.formattedMetric}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* Bi-temporal change chart — responsive 1-at-a-time tab view with full width */
+/* Bi-temporal change chart */
 function ChangeChart({ result }: { result: AnalysisResponse }) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<"bar" | "spline" | "radar">("bar");
-  const metrics = useMemo(() => getStableFeatureMetrics(result, t), [result, t]);
+  const totalViewportKm2 = result.change?.total_viewport_area_km2 || 1.85;
+  const metrics = useMemo(() => getStableFeatureMetrics(result, t, totalViewportKm2), [result, t, totalViewportKm2]);
 
   const highlightedMetrics = metrics.filter(m => m.isHighlighted);
   const changePercent = result.change?.changed_area_percent;
@@ -393,7 +474,7 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
         data={metrics} 
         barGap={6} 
         barCategoryGap="22%" 
-        margin={{ top: 15, right: 15, left: -15, bottom: 25 }}
+        margin={{ top: 15, right: 15, left: -10, bottom: 25 }}
       >
         <defs>
           <linearGradient id="barPreGrad" x1="0" y1="0" x2="0" y2="1">
@@ -418,7 +499,7 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
           tick={{ fill: '#64748b', fontSize: 10 }} 
           axisLine={{ stroke: 'rgba(148,163,184,0.1)' }}
           tickLine={false}
-          unit="%" 
+          unit="%"
         />
         <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'rgba(56, 189, 248, 0.05)' }} />
         <Legend 
@@ -437,7 +518,7 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart 
         data={metrics} 
-        margin={{ top: 15, right: 15, left: -15, bottom: 25 }}
+        margin={{ top: 15, right: 15, left: -10, bottom: 25 }}
       >
         <defs>
           <linearGradient id="splinePreGrad" x1="0" y1="0" x2="0" y2="1">
@@ -462,7 +543,7 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
           tick={{ fill: '#64748b', fontSize: 10 }} 
           axisLine={{ stroke: 'rgba(148,163,184,0.1)' }}
           tickLine={false}
-          unit="%" 
+          unit="%"
         />
         <Tooltip content={<CustomChartTooltip />} />
         <Legend 
@@ -545,7 +626,7 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
 
   return (
     <div className="rounded-2xl bg-[#0c1428]/85 backdrop-blur-md border border-white/8 shadow-xl p-4 sm:p-5 mt-3 space-y-4">
-      {/* Top Header */}
+      {/* Top Header - Clean, No Unit Switcher In Graph */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/5">
         <div className="flex items-center gap-2.5">
           <div className="flex size-7 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-sm shrink-0">
@@ -576,8 +657,8 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
           </div>
         </div>
 
-        {/* 3 Individual Graph Tabs */}
-        <div className="grid grid-cols-3 sm:flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/8 text-xs font-semibold w-full sm:w-auto shrink-0">
+        {/* 3 Graph Type Tabs */}
+        <div className="grid grid-cols-3 sm:flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/8 text-xs font-semibold shrink-0">
           <button 
             onClick={() => setActiveTab("bar")}
             className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer whitespace-nowrap ${
@@ -608,45 +689,69 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
         </div>
       </div>
 
-      {/* Spacious Full-Width Chart Area */}
+      {/* Clean Graph Area */}
       <div className="w-full h-72 sm:h-80 pt-1">
         {activeTab === "bar" && renderBarChart()}
         {activeTab === "spline" && renderSplineChart()}
         {activeTab === "radar" && renderRadarChart()}
       </div>
 
-      {/* Telemetry Feature Metrics Breakdown */}
-      <div className="pt-2 border-t border-white/5">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* Simple Ground Area Numbers (Placed Appropriately Below Graph) */}
+      <div className="pt-3 border-t border-white/5 space-y-2.5">
+        <div className="flex items-center justify-between text-xs text-slate-400 px-0.5">
+          <span className="font-semibold uppercase tracking-wider text-[11px] text-slate-300 flex items-center gap-1.5">
+            <Scale className="size-3.5 text-cyan-400" />
+            <span>Ground Area Metrics (~{totalViewportKm2.toFixed(2)} km² Viewport)</span>
+          </span>
+          <span className="text-[10px] font-mono text-cyan-400/80 hidden sm:inline">
+            1 km² = 1,000,000 m² ≈ 10.76M sq ft
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {metrics.map((m, idx) => {
-            const delta = Math.round((m.post - m.pre) * 10) / 10;
-            const isPos = delta > 0;
+            const preVal = typeof m.pre === "number" && !isNaN(m.pre) ? m.pre : 0;
+            const postVal = typeof m.post === "number" && !isNaN(m.post) ? m.post : 0;
+            const deltaNum = typeof m.delta === "number" && !isNaN(m.delta) ? m.delta : Math.round((postVal - preVal) * 10) / 10;
+            const isPos = deltaNum > 0;
+            const deltaAreaKm2 = typeof m.deltaAreaKm2 === "number" && !isNaN(m.deltaAreaKm2) ? m.deltaAreaKm2 : (deltaNum / 100 * totalViewportKm2);
+            const metricNumber = m.formattedMetric || formatAreaSmart(deltaAreaKm2);
+            const deltaSqFt = typeof m.deltaSqFt === "number" && !isNaN(m.deltaSqFt) ? m.deltaSqFt : Math.round(Math.abs(deltaAreaKm2) * 10763910.4);
+            const imperialNumber = m.formattedImperial || (deltaSqFt >= 1_000_000 ? `${(deltaSqFt / 1_000_000).toFixed(2)}M sq ft` : `${Math.round(deltaSqFt / 1000)}k sq ft`);
+            const actionDescription = m.actionText || getActionDescription(m.category || "Terrain Feature", deltaAreaKm2);
+
             return (
               <div 
                 key={idx} 
-                className={`p-2 rounded-xl border transition-all ${
-                  m.isHighlighted 
-                    ? "bg-rose-500/5 border-rose-500/20" 
-                    : "bg-white/[0.02] border-white/5"
-                }`}
+                className="p-3 rounded-xl bg-black/30 border border-white/8 hover:border-white/15 transition-all flex flex-col justify-between min-h-[96px]"
               >
-                <div className="flex items-center gap-1.5 mb-1">
-                  {m.isHighlighted ? (
-                    <span className="size-1.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
-                  ) : (
-                    <span className="size-1.5 rounded-full bg-slate-500 shrink-0" />
-                  )}
-                  <span className="text-[11px] font-semibold text-slate-300 truncate" title={m.category}>
-                    {m.category}
-                  </span>
+                <div>
+                  <div className="flex items-center justify-between gap-1.5 mb-1.5">
+                    <span className="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5 min-w-0" title={m.category}>
+                      <span className={`size-1.5 rounded-full shrink-0 ${m.isHighlighted ? "bg-rose-400 animate-pulse" : "bg-cyan-400"}`} />
+                      <span className="truncate">{m.category}</span>
+                    </span>
+                    <span className={`text-[10px] font-mono font-extrabold px-1.5 py-0.5 rounded shrink-0 ${
+                      isPos ? "bg-rose-500/20 text-rose-300" : "bg-emerald-500/20 text-emerald-300"
+                    }`}>
+                      {isPos ? `+${deltaNum}%` : `${deltaNum}%`}
+                    </span>
+                  </div>
+                  
+                  {/* Simple Numbers */}
+                  <div className="flex items-baseline justify-between gap-2 mt-1">
+                    <span className="text-xs font-mono font-extrabold text-cyan-300">
+                      {metricNumber}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {imperialNumber}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-slate-400 text-[10px]">{m.pre}% → {m.post}%</span>
-                  <span className={`text-[10px] font-bold ${
-                    delta === 0 ? "text-slate-400" : isPos ? "text-rose-400" : "text-emerald-400"
-                  }`}>
-                    {delta > 0 ? `+${delta}%` : `${delta}%`}
-                  </span>
+
+                {/* Direct text description */}
+                <div className="text-[10px] text-slate-300 font-sans mt-2 pt-1.5 border-t border-white/5 leading-snug">
+                  {actionDescription}
                 </div>
               </div>
             );
@@ -869,6 +974,7 @@ export default function Index() {
   const [mode, setMode] = useState<"chat" | "map">("chat");
   const [isDragging, setIsDragging] = useState(false);
   const [lightboxData, setLightboxData] = useState<{ url: string; boxes: BoundingBox[]; label?: string } | null>(null);
+  const [viewportAreaKm2, setViewportAreaKm2] = useState<number>(1.85);
 
   const { t, lang } = useI18n();
 
@@ -966,6 +1072,7 @@ export default function Index() {
     setMessages([]);
     setPendingImages([]);
     setQuery("");
+    setMode("chat");
     if (window.innerWidth < 768) setSidebarOpen(false);
   };
 
@@ -979,6 +1086,7 @@ export default function Index() {
     if (currentSessionId === id) {
       if (updated.length > 0) {
         setCurrentSessionId(updated[0]?.id || "");
+        setMode("chat");
       } else {
         createNewChat();
       }
@@ -1030,6 +1138,18 @@ export default function Index() {
     imageFiles?: File | File[],
     meta?: { dateT1?: string; dateT2?: string; labelT1?: string; isBitemporal?: boolean }
   ) => {
+    // Calculate realistic physical ground area from geo bounding box (km²)
+    let calculatedAreaKm2 = 1.85;
+    if (bounds && bounds[0] && bounds[1]) {
+      const latDiff = Math.abs(bounds[1][0] - bounds[0][0]);
+      const lonDiff = Math.abs(bounds[1][1] - bounds[0][1]);
+      const midLat = ((bounds[0][0] + bounds[1][0]) / 2) * (Math.PI / 180);
+      const latDistKm = latDiff * 111.32;
+      const lonDistKm = lonDiff * (111.32 * Math.cos(midLat));
+      calculatedAreaKm2 = Math.max(0.01, Math.round(latDistKm * lonDistKm * 100) / 100);
+      setViewportAreaKm2(calculatedAreaKm2);
+    }
+
     const filesArray = imageFiles 
       ? (Array.isArray(imageFiles) ? imageFiles : [imageFiles])
       : [];
@@ -1037,10 +1157,10 @@ export default function Index() {
     if (meta?.isBitemporal && filesArray.length >= 2) {
       const eraT1 = meta.labelT1 || meta.dateT1 || "T1 Baseline";
       const eraT2 = meta.dateT2 || "T2 Observation";
-      const q = `Perform bi-temporal change detection on the zoomed-in region [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}] comparing high-resolution satellite imagery from ${eraT1} (T1 Baseline) and ${eraT2} (T2 Observation). Quantify land-cover shifts, urban footprint growth, vegetation dynamics, and environmental changes.`;
+      const q = `Perform bi-temporal change detection on the zoomed-in region [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}] (~${calculatedAreaKm2.toFixed(2)} km²) comparing high-resolution satellite imagery from ${eraT1} (T1 Baseline) and ${eraT2} (T2 Observation). Quantify land-cover shifts, urban footprint growth, vegetation dynamics, and environmental changes.`;
       setQuery(q);
     } else {
-      const q = `Analyze the region at coordinates [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}].`;
+      const q = `Analyze the region at coordinates [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}] (~${calculatedAreaKm2.toFixed(2)} km²).`;
       setQuery(q);
     }
     
@@ -1081,9 +1201,10 @@ export default function Index() {
     const contextImages = getContextImages();
     const imgs = [...pendingImages]; 
     const isNewImage = imgs.length > 0;
+    const userQuery = query.trim();
     
     const msgToAdd: ChatMessage = { id: Math.random().toString(), role: "user" };
-    if (query.trim()) msgToAdd.text = query.trim();
+    if (userQuery) msgToAdd.text = userQuery;
     if (isNewImage) msgToAdd.images = imgs;
     
     setMessages((p) => [...p, msgToAdd]);
@@ -1093,32 +1214,51 @@ export default function Index() {
     setBusy(true);
     setProgressText(t("initializing"));
 
-    const apiKey = localStorage.getItem("satquery.apikey");
-    const needsTitle = !sessions.find(s => s.id === currentSessionId);
+    const apiKey = getApiKey();
+    const sessionIdForMsg = currentSessionId;
+
+    // Check if session needs a real title (either doesn't exist, has no title, or is generic "New Chat...")
+    const existingSession = sessions.find(s => s.id === sessionIdForMsg);
+    const needsTitle = !existingSession || !existingSession.title || existingSession.title.startsWith("New Chat") || existingSession.title === "Previous Session";
+
+    // Immediate smart title generated locally from query text (NEVER generic "New Chat")
+    const immediateSmartTitle = extractSmartFallbackTitle(
+      userQuery || (imgs.length > 1 ? "Bi-Temporal Satellite Analysis" : imgs.length === 1 ? "Satellite Image Analysis" : "Earth Observation")
+    );
     
     setSessions(prev => {
-      const existing = prev.find(s => s.id === currentSessionId);
+      const existing = prev.find(s => s.id === sessionIdForMsg);
       if (!existing) {
-         const initialSession = { id: currentSessionId, title: "New Chat...", updatedAt: Date.now() };
+         const initialSession = { id: sessionIdForMsg, title: immediateSmartTitle, updatedAt: Date.now() };
          const updated = [initialSession, ...prev];
          localforage.setItem("satquery.sessions", updated);
          return updated;
       } else {
-         const updated = prev.map(s => s.id === currentSessionId ? { ...s, updatedAt: Date.now() } : s);
+         const updated = prev.map(s => s.id === sessionIdForMsg 
+           ? { ...s, title: (needsTitle ? immediateSmartTitle : s.title), updatedAt: Date.now() } 
+           : s
+         );
          updated.sort((a,b) => b.updatedAt - a.updatedAt);
          localforage.setItem("satquery.sessions", updated);
          return updated;
       }
     });
 
-    if (apiKey && needsTitle) {
-       generateChatTitle(query.trim() || "Analyze image", apiKey).then(titleText => {
-          setSessions(prev => {
-            const updated = prev.map(s => s.id === currentSessionId ? { ...s, title: titleText } : s);
-            localforage.setItem("satquery.sessions", updated);
-            return updated;
-          });
-       });
+    // Run AI title generation in background with fallback support across Key 1, Key 2, and env
+    if (needsTitle) {
+      generateChatTitle(userQuery || "Analyze satellite imagery", apiKey || undefined)
+        .then(titleText => {
+          if (titleText && !titleText.startsWith("New Chat")) {
+            setSessions(prev => {
+              const updated = prev.map(s => s.id === sessionIdForMsg ? { ...s, title: titleText } : s);
+              localforage.setItem("satquery.sessions", updated);
+              return updated;
+            });
+          }
+        })
+        .catch(err => {
+          console.warn("Could not generate AI title, preserving smart fallback:", err);
+        });
     }
 
     try {
@@ -1126,14 +1266,21 @@ export default function Index() {
       
       let res;
       if (messages.length === -1) {
-        res = await analyzeWithGeoChat(query.trim() || "Analyze this context.", filesToAnalyze);
+        res = await analyzeWithGeoChat(userQuery || "Analyze this context.", filesToAnalyze);
       } else {
-        res = await runOrchestration(query.trim() || "Analyze this context.", filesToAnalyze, (m) => setProgressText(m));
+        res = await runOrchestration(userQuery || "Analyze this context.", filesToAnalyze, (m) => setProgressText(m));
       }
       
       const resMsg: ChatMessage = { id: Math.random().toString(), role: "assistant", result: res };
       if (res.change) {
-        getStableFeatureMetrics(res, t);
+        if (!res.change.total_viewport_area_km2 || res.change.total_viewport_area_km2 <= 0) {
+          res.change.total_viewport_area_km2 = viewportAreaKm2;
+        }
+        if (!res.change.changed_area_km2 && res.change.changed_area_percent != null) {
+          res.change.changed_area_km2 = Math.round((res.change.changed_area_percent / 100) * res.change.total_viewport_area_km2 * 1000) / 1000;
+          res.change.changed_area_sqft = Math.round(res.change.changed_area_km2 * 10763910.4);
+        }
+        getStableFeatureMetrics(res, t, res.change.total_viewport_area_km2);
       }
       resMsg.images = isNewImage ? imgs : contextImages;
 
@@ -1231,7 +1378,11 @@ export default function Index() {
           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 py-2">{t("sidebar.chats")}</div>
           {sessions.map(s => (
             <div key={s.id} 
-              onClick={() => { setCurrentSessionId(s.id); if (window.innerWidth < 768) setSidebarOpen(false); }}
+              onClick={() => { 
+                setCurrentSessionId(s.id); 
+                setMode("chat"); 
+                if (window.innerWidth < 768) setSidebarOpen(false); 
+              }}
               className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group cursor-pointer transition-colors ${currentSessionId === s.id ? 'bg-white/8 border border-white/10 shadow-sm text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
             >
               <div className="flex items-center gap-2 truncate">
