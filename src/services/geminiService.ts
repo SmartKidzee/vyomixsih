@@ -1,18 +1,33 @@
 import { AnalysisResponse, SatQueryError } from '../lib/satquery';
 import * as GeoTIFF from 'geotiff';
 
-const getApiKey = () => {
+export const getApiKeys = (): string[] => {
+  const keys: string[] = [];
   if (typeof window !== "undefined") {
-    const key = window.localStorage.getItem("satquery.apikey");
-    if (key) return key;
+    const k1 = window.localStorage.getItem("satquery.apikey1") || window.localStorage.getItem("satquery.apikey");
+    const k2 = window.localStorage.getItem("satquery.apikey2");
+    if (k1 && k1.trim()) keys.push(k1.trim());
+    if (k2 && k2.trim() && !keys.includes(k2.trim())) keys.push(k2.trim());
   }
-  return import.meta.env["VITE_GEMINI_API_KEY"] as string | undefined;
+  const envKey = import.meta.env["VITE_GEMINI_API_KEY"] as string | undefined;
+  if (envKey && !keys.includes(envKey)) keys.push(envKey);
+  return keys;
+};
+
+const getApiKey = () => {
+  const keys = getApiKeys();
+  return keys[0] || undefined;
 };
 
 export const setApiKey = (key: string) => {
   if (typeof window === "undefined") return;
-  if (key) window.localStorage.setItem("satquery.apikey", key);
-  else window.localStorage.removeItem("satquery.apikey");
+  if (key) {
+    window.localStorage.setItem("satquery.apikey1", key);
+    window.localStorage.setItem("satquery.apikey", key);
+  } else {
+    window.localStorage.removeItem("satquery.apikey1");
+    window.localStorage.removeItem("satquery.apikey");
+  }
 };
 
 async function fileToBase64(file: File): Promise<string> {
@@ -86,7 +101,7 @@ export async function analyzeWithGemini(
 ): Promise<AnalysisResponse> {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new SatQueryError("No Gemini API Key found. Please add it to your environment or settings.", 0);
+    throw new SatQueryError("No API Key found. Please add API Key 1 or API Key 2 in Settings.", 0);
   }
 
   const parts: any[] = [];
@@ -173,14 +188,14 @@ Only output the JSON object without any markdown wrappers.`
   }
 
   if (!response || !response.ok) {
-    throw new SatQueryError(`Gemini API Error: ${lastErrorText}`, lastStatus);
+    throw new SatQueryError(`API Error: ${lastErrorText}`, lastStatus);
   }
 
   const data = await response.json();
   let jsonString = data.candidates?.[0]?.content?.parts?.[0]?.text;
   
   if (!jsonString) {
-    throw new SatQueryError("Invalid response from Gemini", 500);
+    throw new SatQueryError("Invalid response from AI engine", 500);
   }
   
   jsonString = jsonString.replace(/```json/g, '').replace(/```/g, '').trim();

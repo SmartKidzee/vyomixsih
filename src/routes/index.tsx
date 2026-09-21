@@ -325,7 +325,7 @@ function CustomRadarTick({ payload, x, y, cx, cy }: any) {
   }
 
   return (
-    <text x={x} y={y} textAnchor={textAnchor} fill="#94a3b8" fontSize={10} fontWeight={600}>
+    <text x={x} y={y} textAnchor={textAnchor as any} fill="#94a3b8" fontSize={10} fontWeight={600}>
       {lines.map((l, idx) => (
         <tspan key={idx} x={x} dy={idx === 0 ? (lines.length > 1 ? -4 : 3) : 12}>
           {l.length > 14 ? l.slice(0, 13) + "…" : l}
@@ -515,7 +515,6 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
           angle={30} 
           tick={{ fill: '#64748b', fontSize: 9 }} 
           stroke="rgba(148,163,184,0.12)"
-          unit="%"
         />
         <Tooltip content={<CustomChartTooltip />} />
         <Legend 
@@ -1026,19 +1025,32 @@ export default function Index() {
     return [];
   };
 
-  const handleMapSelect = (bounds: [[number, number], [number, number]], imageFile?: File) => {
-    const q = `Analyze the region at coordinates [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}].`;
-    setQuery(q);
+  const handleMapSelect = (
+    bounds: [[number, number], [number, number]], 
+    imageFiles?: File | File[],
+    meta?: { dateT1?: string; dateT2?: string; labelT1?: string; isBitemporal?: boolean }
+  ) => {
+    const filesArray = imageFiles 
+      ? (Array.isArray(imageFiles) ? imageFiles : [imageFiles])
+      : [];
+
+    if (meta?.isBitemporal && filesArray.length >= 2) {
+      const eraT1 = meta.labelT1 || meta.dateT1 || "T1 Baseline";
+      const eraT2 = meta.dateT2 || "T2 Observation";
+      const q = `Perform bi-temporal change detection on the zoomed-in region [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}] comparing high-resolution satellite imagery from ${eraT1} (T1 Baseline) and ${eraT2} (T2 Observation). Quantify land-cover shifts, urban footprint growth, vegetation dynamics, and environmental changes.`;
+      setQuery(q);
+    } else {
+      const q = `Analyze the region at coordinates [${bounds?.[0]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[0]?.[1]?.toFixed(4) || "0.0000"}] to [${bounds?.[1]?.[0]?.toFixed(4) || "0.0000"}, ${bounds?.[1]?.[1]?.toFixed(4) || "0.0000"}].`;
+      setQuery(q);
+    }
     
-    if (imageFile) {
-      try {
-        const dt = new DataTransfer();
-        dt.items.add(imageFile);
-        addImages(dt.files);
-      } catch (e) {
-        const id = `map-${Date.now()}`;
-        setPendingImages(p => [...p, { id, file: imageFile, previewUrl: URL.createObjectURL(imageFile) }]);
-      }
+    if (filesArray.length > 0) {
+      const newItems = filesArray.map((file, idx) => ({
+        id: `map-${idx}-${Date.now()}`,
+        file,
+        previewUrl: URL.createObjectURL(file)
+      }));
+      setPendingImages(p => [...p, ...newItems]);
     }
     
     setMode("chat");
@@ -1203,8 +1215,8 @@ export default function Index() {
       <div className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-64 border-r border-white/8 bg-[#080e1e]/95 backdrop-blur-xl transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
         <div className="p-4 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
-              <Satellite className="size-4 text-white" />
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-cyan-500/15 border border-white/10 bg-[#080e1e] p-1">
+              <img src="/logo.svg" alt="Earth Query Lens" className="size-full object-contain" />
             </div>
             <div>
               <h1 className="text-sm font-bold text-white font-serif tracking-tight">{t("app.title")}</h1>
