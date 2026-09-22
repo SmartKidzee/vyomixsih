@@ -154,10 +154,13 @@ export function setApiBaseUrl(url: string) {
 export function humanizeError(err: unknown): string {
   if (err instanceof SatQueryError) {
     if (err.status === 0) {
-      if (err.message && (err.message.includes("GeoChat") || err.message.includes("Gemini"))) {
-        return err.message; // Preserve specific network errors
+      // Only show the SatQuery backend message for the generic "network" error
+      // thrown by the satquery analyze() function. All other status-0 errors
+      // (from SatVision, HuggingFace, etc.) should pass through with their actual message.
+      if (err.message === "network") {
+        return "Could not reach the SatQuery backend. Check that it is running and that the address in Backend settings is correct.";
       }
-      return "Could not reach the SatQuery backend. Check that it is running and that the address in Backend settings is correct.";
+      return err.message;
     }
     if (err.status === 413) return "That file is too large for the backend to accept.";
     if (err.status === 415) return "That file format isn't supported by the backend.";

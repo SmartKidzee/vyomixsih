@@ -1,15 +1,38 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-export type Language = "en" | "hi" | "kn";
+export type Language =
+  | "en" | "as" | "bn" | "brx" | "doi" | "gom" | "gu" | "hi"
+  | "kn" | "ks" | "mai" | "ml" | "mni" | "mr" | "ne" | "or"
+  | "pa" | "sa" | "sat" | "sd" | "ta" | "te" | "ur";
 
 export const LANGUAGES: { code: Language; label: string; nativeLabel: string }[] = [
-  { code: "en", label: "English", nativeLabel: "English" },
-  { code: "hi", label: "Hindi", nativeLabel: "हिन्दी" },
-  { code: "kn", label: "Kannada", nativeLabel: "ಕನ್ನಡ" },
+  { code: "en",  label: "English",    nativeLabel: "English" },
+  { code: "as",  label: "Assamese",   nativeLabel: "অসমীয়া" },
+  { code: "bn",  label: "Bengali",    nativeLabel: "বাংলা" },
+  { code: "brx", label: "Bodo",       nativeLabel: "बड़ो" },
+  { code: "doi", label: "Dogri",      nativeLabel: "डोगरी" },
+  { code: "gom", label: "Konkani",    nativeLabel: "कोंकणी" },
+  { code: "gu",  label: "Gujarati",   nativeLabel: "ગુજરાતી" },
+  { code: "hi",  label: "Hindi",      nativeLabel: "हिन्दी" },
+  { code: "kn",  label: "Kannada",    nativeLabel: "ಕನ್ನಡ" },
+  { code: "ks",  label: "Kashmiri",   nativeLabel: "कॉशुर" },
+  { code: "mai", label: "Maithili",   nativeLabel: "मैथिली" },
+  { code: "ml",  label: "Malayalam",  nativeLabel: "മലയാളം" },
+  { code: "mni", label: "Manipuri",   nativeLabel: "মৈতৈলোন্" },
+  { code: "mr",  label: "Marathi",    nativeLabel: "मराठी" },
+  { code: "ne",  label: "Nepali",     nativeLabel: "नेपाली" },
+  { code: "or",  label: "Odia",       nativeLabel: "ଓଡ଼ିଆ" },
+  { code: "pa",  label: "Punjabi",    nativeLabel: "ਪੰਜਾਬੀ" },
+  { code: "sa",  label: "Sanskrit",   nativeLabel: "संस्कृतम्" },
+  { code: "sat", label: "Santali",    nativeLabel: "ᱥᱟᱱᱛᱟᱲᱤ" },
+  { code: "sd",  label: "Sindhi",     nativeLabel: "سنڌي" },
+  { code: "ta",  label: "Tamil",      nativeLabel: "தமிழ்" },
+  { code: "te",  label: "Telugu",     nativeLabel: "తెలుగు" },
+  { code: "ur",  label: "Urdu",       nativeLabel: "اردو" },
 ];
 
 // Translation keys
-const translations: Record<Language, Record<string, string>> = {
+const translations: Partial<Record<Language, Record<string, string>>> = {
   en: {
     "app.title": "Earth Query Lens",
     "app.subtitle": "Multimodal Geospatial AI",
@@ -223,7 +246,7 @@ const translations: Record<Language, Record<string, string>> = {
 };
 
 // Greetings per language
-export const SPACE_GREETINGS: Record<Language, string[]> = {
+export const SPACE_GREETINGS: Partial<Record<Language, string[]>> = {
   en: [
     "Houston, we have a query.",
     "Scanning the cosmos for answers.",
@@ -278,7 +301,7 @@ export const SPACE_GREETINGS: Record<Language, string[]> = {
 };
 
 // Suggestion prompts per language
-export const ALL_SUGGESTIONS: Record<Language, { q: string; icon: string }[]> = {
+export const ALL_SUGGESTIONS: Partial<Record<Language, { q: string; icon: string }[]>> = {
   en: [
     { q: "Describe this terrain from orbit", icon: "🛰️" },
     { q: "Detect water bodies in this region", icon: "🌊" },
@@ -351,7 +374,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("satquery.lang") as Language;
-      if (saved && translations[saved]) return saved;
+      // Accept any language in our LANGUAGES list (not just ones with hardcoded translations)
+      if (saved && LANGUAGES.some(l => l.code === saved)) return saved;
     }
     return "en";
   });

@@ -3,14 +3,15 @@ import {
   Satellite, Send, Paperclip, X, Loader2, AlertCircle, ChevronDown,
   ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3,
   Menu, Map as MapIcon, MessageSquare, Eye, Rocket, ZoomIn, TrendingUp,
-  Compass, Scale
+  Compass, Scale, Radio, Sun, ExternalLink, DownloadCloud, Info
 } from "lucide-react";
 import { BackendSettings } from "@/components/BackendSettings";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MapSelector } from "@/components/MapSelector";
 import {
   humanizeError, formatConfidence, confidenceRatio,
-  type AnalysisResponse, type BoundingBox, type LandCoverMetrics, type FeatureMetric
+  type AnalysisResponse, type BoundingBox, type LandCoverMetrics, type FeatureMetric,
+  type OpticalSarResult
 } from "@/lib/satquery";
 import { useI18n, SPACE_GREETINGS, ALL_SUGGESTIONS, type Language } from "@/lib/i18n";
 import localforage from "localforage";
@@ -45,12 +46,12 @@ export interface ChatSession {
 }
 
 function getRandomGreeting(lang: Language): string {
-  const greetings = SPACE_GREETINGS[lang] || SPACE_GREETINGS["en"];
+  const greetings = SPACE_GREETINGS[lang] ?? SPACE_GREETINGS["en"]!;
   return greetings[Math.floor(Math.random() * greetings.length)]!;
 }
 
 function getRandomSuggestions(lang: Language, count: number = 4) {
-  const suggestions = ALL_SUGGESTIONS[lang] || ALL_SUGGESTIONS["en"];
+  const suggestions = ALL_SUGGESTIONS[lang] ?? ALL_SUGGESTIONS["en"]!;
   const shuffled = [...suggestions].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
@@ -106,21 +107,35 @@ function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; b
       canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
       boxes.forEach((b) => {
-        const [x1, y1, x2, y2] = b.bbox;
-        const norm = [x1, y1, x2, y2].every((v) => v >= 0 && v <= 1);
-        const rx = norm ? x1 * img.naturalWidth : x1;
-        const ry = norm ? y1 * img.naturalHeight : y1;
-        const rw = norm ? (x2 - x1) * img.naturalWidth : x2 - x1;
-        const rh = norm ? (y2 - y1) * img.naturalHeight : y2 - y1;
-        const isChange = /change|clear|construct|modifi|alter|destroy|flood|loss|damage|new|burned|excavat/i.test(b.label ?? "");
+        if (!b?.bbox || !Array.isArray(b.bbox) || b.bbox.length < 4) return;
+        const rawX1 = Number(b.bbox[0]);
+        const rawY1 = Number(b.bbox[1]);
+        const rawX2 = Number(b.bbox[2]);
+        const rawY2 = Number(b.bbox[3]);
+        if (isNaN(rawX1) || isNaN(rawY1) || isNaN(rawX2) || isNaN(rawY2)) return;
+
+        const minX = Math.min(rawX1, rawX2);
+        const maxX = Math.max(rawX1, rawX2);
+        const minY = Math.min(rawY1, rawY2);
+        const maxY = Math.max(rawY1, rawY2);
+
+        const norm = [minX, minY, maxX, maxY].every((v) => v >= 0 && v <= 1);
+        const is1000 = !norm && [minX, minY, maxX, maxY].every((v) => v >= 0 && v <= 1000);
+
+        const rx = norm ? minX * img.naturalWidth : is1000 ? (minX / 1000) * img.naturalWidth : minX;
+        const ry = norm ? minY * img.naturalHeight : is1000 ? (minY / 1000) * img.naturalHeight : minY;
+        const rw = Math.max(14, norm ? (maxX - minX) * img.naturalWidth : is1000 ? ((maxX - minX) / 1000) * img.naturalWidth : (maxX - minX));
+        const rh = Math.max(14, norm ? (maxY - minY) * img.naturalHeight : is1000 ? ((maxY - minY) / 1000) * img.naturalHeight : (maxY - minY));
+
+        const isChange = /change|clear|construct|modifi|alter|destroy|flood|loss|damage|new|burned|excavat|discrep/i.test(b.label ?? "");
 
         // Translucent highlight fill so user clearly sees the highlighted zone
-        ctx.fillStyle = isChange ? "rgba(244, 63, 94, 0.18)" : "rgba(16, 185, 129, 0.15)";
+        ctx.fillStyle = isChange ? "rgba(244, 63, 94, 0.22)" : "rgba(16, 185, 129, 0.18)";
         ctx.fillRect(rx, ry, rw, rh);
 
-        // Crisp border
+        // Crisp border with glow effect
         ctx.strokeStyle = isChange ? "#f43f5e" : "#10b981";
-        ctx.lineWidth = Math.max(2.5, img.naturalWidth * 0.0035);
+        ctx.lineWidth = Math.max(3, img.naturalWidth * 0.004);
         ctx.strokeRect(rx, ry, rw, rh);
 
         // Feature label tag
@@ -129,9 +144,10 @@ function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; b
           const fontSize = Math.max(12, img.naturalWidth * 0.018);
           ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
           const tw = ctx.measureText(b.label).width;
-          ctx.fillRect(rx, ry - fontSize - 6, tw + 14, fontSize + 10);
+          const tagY = Math.max(fontSize + 6, ry);
+          ctx.fillRect(rx, tagY - fontSize - 6, tw + 14, fontSize + 8);
           ctx.fillStyle = "#fff";
-          ctx.fillText(b.label, rx + 7, ry - 4);
+          ctx.fillText(b.label, rx + 7, tagY - 4);
         }
       });
     };
@@ -762,6 +778,161 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
   );
 }
 
+/* In-Browser ONNX ML Optical & SAR Fusion Card */
+function OpticalSarCard({ data }: { data: OpticalSarResult }) {
+  const [open, setOpen] = useState(true);
+  const opticalItems = Array.isArray(data.optical_evidence)
+    ? data.optical_evidence
+    : data.optical_evidence ? [data.optical_evidence] : [];
+  const sarItems = Array.isArray(data.sar_evidence)
+    ? data.sar_evidence
+    : data.sar_evidence ? [data.sar_evidence] : [];
+  const compItems = Array.isArray(data.complementary)
+    ? data.complementary
+    : data.complementary ? [data.complementary] : [];
+
+  return (
+    <div className="rounded-2xl border border-cyan-500/25 bg-[#0a1224]/90 backdrop-blur-md p-4 shadow-xl shadow-cyan-950/20 overflow-hidden animate-in fade-in duration-300">
+      <div className="flex items-center justify-between pb-3 border-b border-white/5 cursor-pointer" onClick={() => setOpen(!open)}>
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400">
+            <Radio className="size-4 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-white">In-Browser ONNX ML Pipeline</h4>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold">WebAssembly / WebGL</span>
+            </div>
+            <p className="text-[11px] text-slate-400">100% Free Client-Side Optical (NDVI/NDWI) & SAR (Lee Filter & Backscatter dB)</p>
+          </div>
+        </div>
+        <button className="text-slate-400 hover:text-white transition-colors p-1" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
+          {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        </button>
+      </div>
+
+      {open && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3.5">
+          {/* Optical Analysis Box */}
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Sun className="size-3.5 text-amber-400" />
+              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">Optical Multi-Spectral Indices</span>
+            </div>
+            <ul className="space-y-1.5 text-xs text-slate-300">
+              {opticalItems.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-1.5 leading-snug">
+                  <span className="text-amber-400 font-bold mt-0.5">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* SAR Analysis Box */}
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Radio className="size-3.5 text-violet-400" />
+              <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">SAR Synthetic Aperture Radar</span>
+            </div>
+            <ul className="space-y-1.5 text-xs text-slate-300">
+              {sarItems.map((item, idx) => (
+                <li key={idx} className="flex items-start gap-1.5 leading-snug">
+                  <span className="text-violet-400 font-bold mt-0.5">•</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Cross-Modality Synergy */}
+          {compItems.length > 0 && (
+            <div className="md:col-span-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Compass className="size-3.5 text-emerald-400" />
+                <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">Cross-Modality Synergy</span>
+              </div>
+              <ul className="space-y-1.5 text-xs text-slate-300">
+                {compItems.map((item, idx) => (
+                  <li key={idx} className="flex items-start gap-1.5 leading-snug">
+                    <span className="text-emerald-400 font-bold mt-0.5">✓</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Modal with Direct Links & Instructions to Download Free Optical & SAR Satellite Imagery */
+function TestDataModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
+      <div className="relative w-full max-w-xl rounded-2xl border border-cyan-500/20 bg-[#0c1425] p-6 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
+          <X className="size-5" />
+        </button>
+        <div className="flex items-center gap-2.5 mb-2">
+          <DownloadCloud className="size-5 text-cyan-400" />
+          <h3 className="text-base font-bold text-white font-serif">Free Optical & SAR Test Satellite Data</h3>
+        </div>
+        <p className="text-xs text-slate-400 mb-5 leading-relaxed">
+          Download real Sentinel-1 SAR (Radar) and Sentinel-2 Optical imagery for free with zero credit cards.
+        </p>
+
+        <div className="space-y-3.5 text-xs text-slate-200">
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-cyan-300 text-sm">1. Copernicus Browser (Fastest & Free)</span>
+              <a href="https://browser.dataspace.copernicus.eu/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-bold text-cyan-400 hover:underline">
+                Visit Portal <ExternalLink className="size-3" />
+              </a>
+            </div>
+            <p className="text-slate-300">
+              European Space Agency portal. Select <strong>Sentinel-1</strong> (radar microwave) or <strong>Sentinel-2</strong> (optical multi-spectral). Click the download camera button on the right for immediate high-res PNG or GeoTIFF.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-violet-300 text-sm">2. ASF Vertex (Alaska Satellite Facility)</span>
+              <a href="https://search.asf.alaska.edu/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-bold text-violet-400 hover:underline">
+                Visit Portal <ExternalLink className="size-3" />
+              </a>
+            </div>
+            <p className="text-slate-300">
+              The world's premier NASA/ESA SAR portal. Free access to Sentinel-1 C-Band synthetic aperture radar datasets, GRD amplitudes, and interferometric pairs.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-amber-300 text-sm">3. USGS EarthExplorer</span>
+              <a href="https://earthexplorer.usgs.gov/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:underline">
+                Visit Portal <ExternalLink className="size-3" />
+              </a>
+            </div>
+            <p className="text-slate-300">
+              US Geological Survey hub for Landsat 8/9, Sentinel optical archives, and global digital elevation models (DEMs).
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-colors">
+            Got It
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* Assistant bubble */
 function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick: (url: string, boxes: BoundingBox[], label?: string) => void }) {
   const r = msg.result!;
@@ -809,6 +980,11 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
         {/* Bi-temporal Change Chart */}
         {isBiTemporal && r.change && (
           <ChangeChart result={r} />
+        )}
+
+        {/* In-Browser ONNX ML Optical & SAR Analysis */}
+        {r.optical_sar && (
+          <OpticalSarCard data={r.optical_sar} />
         )}
 
         {/* Evidence chips */}
@@ -948,8 +1124,14 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
                   {r.execution_trace.steps.map((s, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <Check className="size-3 text-emerald-400 shrink-0" />
-                      <span className="text-slate-300">{s.name}</span>
-                      {s.detail && <span className="text-slate-500">— {s.detail}</span>}
+                      <span className="text-slate-300">
+                        {s.name.replace(/gemini\s*vision/gi, "SatVision AI").replace(/gemini/gi, "SatVision")}
+                      </span>
+                      {s.detail && (
+                        <span className="text-slate-500">
+                          — {s.detail.replace(/gemini\s*vision/gi, "SatVision AI").replace(/gemini/gi, "SatVision")}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -965,18 +1147,29 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
 export default function Index() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>("");
+  const [animatingSessionId, setAnimatingSessionId] = useState<string | null>(null);
+  const [busySessionId, setBusySessionId] = useState<string | null>(null);
+  const [sessionProgress, setSessionProgress] = useState<Record<string, string>>({});
+  const activeSessionRef = useRef<string>("");
+  const loadedSessionIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pendingImages, setPendingImages] = useState<UploadedImage[]>([]);
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [progressText, setProgressText] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mode, setMode] = useState<"chat" | "map">("chat");
   const [isDragging, setIsDragging] = useState(false);
   const [lightboxData, setLightboxData] = useState<{ url: string; boxes: BoundingBox[]; label?: string } | null>(null);
+  const [testDataModalOpen, setTestDataModalOpen] = useState(false);
   const [viewportAreaKm2, setViewportAreaKm2] = useState<number>(1.85);
 
   const { t, lang } = useI18n();
+
+  useEffect(() => {
+    activeSessionRef.current = currentSessionId;
+  }, [currentSessionId]);
+
+  const isCurrentChatBusy = busySessionId === currentSessionId;
+  const currentChatProgress = isCurrentChatBusy ? (sessionProgress[currentSessionId] || t("processing")) : "";
 
   // Randomized greeting and suggestions per language — re-pick when language changes
   const [greeting, setGreeting] = useState(() => getRandomGreeting(lang));
@@ -1005,13 +1198,29 @@ export default function Index() {
       try {
         const savedSessions = await localforage.getItem<ChatSession[]>("satquery.sessions");
         if (savedSessions && savedSessions.length > 0) {
-          setSessions(savedSessions);
+          // Auto-repair any sessions that were previously stuck on "Analyzing Scene..." or generic placeholders
+          const repaired = await Promise.all(savedSessions.map(async s => {
+            if (s.title === "Analyzing Scene..." || !s.title || s.title.startsWith("New Chat") || s.title === "Previous Session") {
+              try {
+                const msgs = await localforage.getItem<ChatMessage[]>(`satquery.session_${s.id}`);
+                const userPrompt = msgs?.find(m => m.role === "user")?.text || "";
+                const assistantFinding = msgs?.find(m => m.role === "assistant")?.result?.caption || "";
+                const fixedTitle = extractSmartFallbackTitle(userPrompt, assistantFinding);
+                return { ...s, title: fixedTitle };
+              } catch {
+                return { ...s, title: "Earth Observation Study" };
+              }
+            }
+            return s;
+          }));
+          setSessions(repaired);
+          await localforage.setItem("satquery.sessions", repaired);
         }
         
         const legacy = await localforage.getItem<ChatMessage[]>("satquery.history");
         if (legacy && legacy.length > 0) {
           const legacyId = `session-${Date.now() - 1}`;
-          const legacySession = { id: legacyId, title: "Previous Session", updatedAt: Date.now() - 1 };
+          const legacySession = { id: legacyId, title: "Satellite History Study", updatedAt: Date.now() - 1 };
           setSessions(prev => {
             const updated = [legacySession, ...prev];
             localforage.setItem("satquery.sessions", updated);
@@ -1021,7 +1230,9 @@ export default function Index() {
           await localforage.removeItem("satquery.history");
         }
         
-        setCurrentSessionId(`session-${Date.now()}`);
+        const initialId = `session-${Date.now()}`;
+        setCurrentSessionId(initialId);
+        loadedSessionIdRef.current = initialId;
         setMessages([]);
       } catch(e) { console.warn("Failed to init", e); }
     };
@@ -1030,9 +1241,12 @@ export default function Index() {
 
   useEffect(() => {
     if (!currentSessionId) return;
+    let isCancelled = false;
+
     localforage.getItem<ChatMessage[]>(`satquery.session_${currentSessionId}`)
       .then((saved) => {
-        if (saved) {
+        if (isCancelled) return;
+        if (saved && saved.length > 0) {
            const restored = saved.map(m => {
              const newM = { ...m };
              if (newM.images) {
@@ -1049,11 +1263,18 @@ export default function Index() {
         } else {
           setMessages([]);
         }
-      });
+        loadedSessionIdRef.current = currentSessionId;
+      })
+      .catch(e => console.warn("Failed to load session messages", e));
+
+    return () => {
+      isCancelled = true;
+    };
   }, [currentSessionId]);
 
   useEffect(() => {
-    if (!currentSessionId) return;
+    // Only save if messages match the session that is currently loaded in memory
+    if (!currentSessionId || loadedSessionIdRef.current !== currentSessionId) return;
     const serialized = messages.map(m => {
       const newM = { ...m };
       if (newM.images) {
@@ -1068,7 +1289,9 @@ export default function Index() {
   }, [messages, currentSessionId]);
 
   const createNewChat = () => {
-    setCurrentSessionId(`session-${Date.now()}`);
+    const newId = `session-${Date.now()}`;
+    setCurrentSessionId(newId);
+    loadedSessionIdRef.current = newId;
     setMessages([]);
     setPendingImages([]);
     setQuery("");
@@ -1095,7 +1318,7 @@ export default function Index() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, busy, mode]);
+  }, [messages, busySessionId, mode]);
 
   const growTextarea = useCallback(() => {
     const el = textareaRef.current;
@@ -1196,7 +1419,7 @@ export default function Index() {
   };
 
   const submit = async () => {
-    if (busy) return;
+    if (isCurrentChatBusy) return;
     
     const contextImages = getContextImages();
     const imgs = [...pendingImages]; 
@@ -1207,21 +1430,33 @@ export default function Index() {
     if (userQuery) msgToAdd.text = userQuery;
     if (isNewImage) msgToAdd.images = imgs;
     
+    const sessionIdForMsg = currentSessionId;
+
+    // Immediately persist user message for this specific session in localforage
+    localforage.getItem<ChatMessage[]>(`satquery.session_${sessionIdForMsg}`)
+      .then(existing => {
+        const arr = existing || [];
+        const serializedUser = { ...msgToAdd, images: msgToAdd.images?.map(i => ({ ...i, previewUrl: null })) };
+        return localforage.setItem(`satquery.session_${sessionIdForMsg}`, [...arr, serializedUser]);
+      })
+      .catch(err => console.warn("Failed saving user message", err));
+
     setMessages((p) => [...p, msgToAdd]);
     setQuery("");
     setPendingImages([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
-    setBusy(true);
-    setProgressText(t("initializing"));
+
+    // Set busy state specifically for this session ID
+    setBusySessionId(sessionIdForMsg);
+    setSessionProgress(p => ({ ...p, [sessionIdForMsg]: t("initializing") }));
 
     const apiKey = getApiKey();
-    const sessionIdForMsg = currentSessionId;
 
-    // Check if session needs a real title (either doesn't exist, has no title, or is generic "New Chat...")
+    // Check if session needs a real title
     const existingSession = sessions.find(s => s.id === sessionIdForMsg);
-    const needsTitle = !existingSession || !existingSession.title || existingSession.title.startsWith("New Chat") || existingSession.title === "Previous Session";
+    const needsTitle = !existingSession || !existingSession.title || existingSession.title.startsWith("New Chat") || existingSession.title === "Previous Session" || existingSession.title === "Analyzing Scene...";
 
-    // Immediate smart title generated locally from query text (NEVER generic "New Chat")
+    // Calculate immediate clean fallback title (so storage NEVER saves "Analyzing Scene...")
     const immediateSmartTitle = extractSmartFallbackTitle(
       userQuery || (imgs.length > 1 ? "Bi-Temporal Satellite Analysis" : imgs.length === 1 ? "Satellite Image Analysis" : "Earth Observation")
     );
@@ -1244,23 +1479,6 @@ export default function Index() {
       }
     });
 
-    // Run AI title generation in background with fallback support across Key 1, Key 2, and env
-    if (needsTitle) {
-      generateChatTitle(userQuery || "Analyze satellite imagery", apiKey || undefined)
-        .then(titleText => {
-          if (titleText && !titleText.startsWith("New Chat")) {
-            setSessions(prev => {
-              const updated = prev.map(s => s.id === sessionIdForMsg ? { ...s, title: titleText } : s);
-              localforage.setItem("satquery.sessions", updated);
-              return updated;
-            });
-          }
-        })
-        .catch(err => {
-          console.warn("Could not generate AI title, preserving smart fallback:", err);
-        });
-    }
-
     try {
       const filesToAnalyze = isNewImage ? imgs.map((i) => i.file) : contextImages.map(i => i.file);
       
@@ -1268,7 +1486,14 @@ export default function Index() {
       if (messages.length === -1) {
         res = await analyzeWithGeoChat(userQuery || "Analyze this context.", filesToAnalyze);
       } else {
-        res = await runOrchestration(userQuery || "Analyze this context.", filesToAnalyze, (m) => setProgressText(m));
+        const isFollowUp = !isNewImage && messages.length > 0;
+        res = await runOrchestration(
+          userQuery || "Analyze this context.",
+          filesToAnalyze,
+          (m) => setSessionProgress(p => ({ ...p, [sessionIdForMsg]: m })),
+          undefined,
+          { isFollowUp }
+        );
       }
       
       const resMsg: ChatMessage = { id: Math.random().toString(), role: "assistant", result: res };
@@ -1286,7 +1511,7 @@ export default function Index() {
 
       // Translate response if language is not English
       if (lang !== "en" && res.answer) {
-        setProgressText(t("translating"));
+        setSessionProgress(p => ({ ...p, [sessionIdForMsg]: t("translating") }));
         try {
           const translated = await translateText(res.answer, lang);
           resMsg.translatedAnswer = translated;
@@ -1295,12 +1520,79 @@ export default function Index() {
         }
       }
 
-      setMessages((p) => [...p, resMsg]);
+      // Persist assistant response directly to localforage for sessionIdForMsg
+      localforage.getItem<ChatMessage[]>(`satquery.session_${sessionIdForMsg}`)
+        .then(existing => {
+          const arr = existing || [];
+          const serializedRes = { ...resMsg, images: resMsg.images?.map(i => ({ ...i, previewUrl: null })) };
+          return localforage.setItem(`satquery.session_${sessionIdForMsg}`, [...arr, serializedRes]);
+        })
+        .catch(err => console.warn("Failed saving assistant message", err));
+
+      // Only update messages in memory if the user is STILL viewing this session
+      if (activeSessionRef.current === sessionIdForMsg) {
+        setMessages((p) => [...p, resMsg]);
+      }
+
+      // Neatly generate title with Gemini AFTER first response output has arrived!
+      if (needsTitle) {
+        const findingSnippet = res.caption || res.change?.description || (typeof res.answer === 'string' ? res.answer : "") || "";
+        generateChatTitle(userQuery || "Earth observation satellite query", findingSnippet, apiKey || undefined)
+          .then(titleText => {
+            if (titleText && !titleText.startsWith("New Chat")) {
+              setAnimatingSessionId(sessionIdForMsg);
+              setSessions(prev => {
+                const updated = prev.map(s => s.id === sessionIdForMsg ? { ...s, title: titleText, updatedAt: Date.now() } : s);
+                localforage.setItem("satquery.sessions", updated);
+                return updated;
+              });
+              setTimeout(() => {
+                setAnimatingSessionId((current) => current === sessionIdForMsg ? null : current);
+              }, 3500);
+            }
+          })
+          .catch(err => {
+            console.warn("Could not generate AI title, using domain fallback:", err);
+            const fallback = extractSmartFallbackTitle(userQuery || "", findingSnippet);
+            setAnimatingSessionId(sessionIdForMsg);
+            setSessions(prev => {
+              const updated = prev.map(s => s.id === sessionIdForMsg ? { ...s, title: fallback, updatedAt: Date.now() } : s);
+              localforage.setItem("satquery.sessions", updated);
+              return updated;
+            });
+            setTimeout(() => {
+              setAnimatingSessionId((current) => current === sessionIdForMsg ? null : current);
+            }, 3500);
+          });
+      }
     } catch (err) {
-      setMessages((p) => [...p, { id: Math.random().toString(), role: "assistant", error: humanizeError(err) }]);
+      const errMsg: ChatMessage = { id: Math.random().toString(), role: "assistant", error: humanizeError(err) };
+      localforage.getItem<ChatMessage[]>(`satquery.session_${sessionIdForMsg}`)
+        .then(existing => {
+          const arr = existing || [];
+          return localforage.setItem(`satquery.session_${sessionIdForMsg}`, [...arr, errMsg]);
+        })
+        .catch(e => console.warn("Failed saving error message", e));
+
+      if (activeSessionRef.current === sessionIdForMsg) {
+        setMessages((p) => [...p, errMsg]);
+      }
+
+      if (needsTitle) {
+        const fallback = extractSmartFallbackTitle(userQuery || "");
+        setSessions(prev => {
+          const updated = prev.map(s => s.id === sessionIdForMsg ? { ...s, title: fallback } : s);
+          localforage.setItem("satquery.sessions", updated);
+          return updated;
+        });
+      }
     } finally {
-      setBusy(false);
-      setProgressText("");
+      setBusySessionId(prev => prev === sessionIdForMsg ? null : prev);
+      setSessionProgress(p => {
+        const next = { ...p };
+        delete next[sessionIdForMsg];
+        return next;
+      });
     }
   };
 
@@ -1339,6 +1631,9 @@ export default function Index() {
         </div>
       )}
 
+      {/* Free Test Data Modal */}
+      <TestDataModal open={testDataModalOpen} onClose={() => setTestDataModalOpen(false)} />
+
       {isDragging && (
         <div className="fixed inset-0 z-[9999] bg-cyan-500/5 backdrop-blur-[2px] border-4 border-dashed border-cyan-400/50 flex items-center justify-center transition-all m-4 rounded-3xl">
           <div className="bg-[#0c1428]/95 backdrop-blur-xl px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-200 border border-white/10">
@@ -1376,28 +1671,72 @@ export default function Index() {
         
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
           <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 py-2">{t("sidebar.chats")}</div>
-          {sessions.map(s => (
-            <div key={s.id} 
-              onClick={() => { 
-                setCurrentSessionId(s.id); 
-                setMode("chat"); 
-                if (window.innerWidth < 768) setSidebarOpen(false); 
-              }}
-              className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group cursor-pointer transition-colors ${currentSessionId === s.id ? 'bg-white/8 border border-white/10 shadow-sm text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-            >
-              <div className="flex items-center gap-2 truncate">
-                <MessageSquare className="size-3.5 shrink-0" /> 
-                <span className="truncate">{s.title}</span>
-              </div>
-              <button 
-                onClick={(e) => deleteSession(s.id, e)}
-                className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all rounded-md hover:bg-red-500/10"
-                title={t("sidebar.deleteChat")}
+          {sessions.map(s => {
+            const isAnalyzing = busySessionId === s.id;
+            const isJustTitled = animatingSessionId === s.id;
+            const isCurrent = currentSessionId === s.id;
+
+            return (
+              <div 
+                key={s.id} 
+                onClick={() => { 
+                  setCurrentSessionId(s.id); 
+                  setMode("chat"); 
+                  if (window.innerWidth < 768) setSidebarOpen(false); 
+                }}
+                className={`relative overflow-hidden w-full text-left px-3 py-2 text-sm rounded-lg flex items-center justify-between group cursor-pointer transition-all duration-300 ${
+                  isJustTitled
+                    ? 'bg-cyan-500/20 border border-cyan-400/70 shadow-lg shadow-cyan-500/25 scale-[1.02] text-cyan-200 animate-title-glow'
+                    : isCurrent 
+                      ? 'bg-white/8 border border-white/10 shadow-sm text-white' 
+                      : 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
               >
-                <X className="size-3" />
-              </button>
-            </div>
-          ))}
+                {/* Light shimmer sweep when title was just generated */}
+                {isJustTitled && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent pointer-events-none animate-title-shimmer" />
+                )}
+
+                <div className="flex items-center gap-2 truncate relative z-10 min-w-0">
+                  {isAnalyzing ? (
+                    <div className="relative flex size-2.5 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full size-2.5 bg-cyan-400"></span>
+                    </div>
+                  ) : isJustTitled ? (
+                    <Sparkles className="size-3.5 shrink-0 text-cyan-300 animate-bounce" />
+                  ) : (
+                    <MessageSquare className="size-3.5 shrink-0 text-slate-400 group-hover:text-cyan-400 transition-colors" />
+                  )}
+
+                  {isAnalyzing ? (
+                    <span className="truncate italic text-xs text-cyan-300 animate-pulse font-medium">
+                      Analyzing Scene...
+                    </span>
+                  ) : (
+                    <span className={`truncate ${isJustTitled ? 'font-semibold bg-gradient-to-r from-cyan-200 via-white to-cyan-300 bg-clip-text text-transparent animate-in fade-in zoom-in-95 duration-500' : ''}`}>
+                      {s.title}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0 relative z-10">
+                  {isJustTitled && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-400/20 text-cyan-300 border border-cyan-400/40 animate-pulse tracking-wider">
+                      AI
+                    </span>
+                  )}
+                  <button 
+                    onClick={(e) => deleteSession(s.id, e)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all rounded-md hover:bg-red-500/10"
+                    title={t("sidebar.deleteChat")}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
           {sessions.length === 0 && (
             <div className="px-3 py-4 text-xs text-center text-slate-500">{t("sidebar.noChats")}</div>
           )}
@@ -1432,6 +1771,14 @@ export default function Index() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setTestDataModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all cursor-pointer shadow-sm"
+              title="Where to get free Optical & SAR satellite imagery"
+            >
+              <DownloadCloud className="size-3.5" />
+              <span className="hidden sm:inline">Free Optical & SAR Data</span>
+            </button>
             <LanguageSwitcher />
             <BackendSettings />
           </div>
@@ -1445,9 +1792,20 @@ export default function Index() {
           <>
             {/* Messages */}
             <div className="flex-1 overflow-y-auto">
-              {messages.length === 0 && !busy ? (
+              {messages.length === 0 && !isCurrentChatBusy ? (
                 <div className="flex flex-col items-center justify-center h-full px-4 py-12 text-center max-w-2xl mx-auto relative z-10">
                   <AnimatedGreeting text={greeting} />
+                  <div className="my-3">
+                    <button
+                      onClick={() => setTestDataModalOpen(true)}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 text-xs font-semibold text-cyan-300 transition-all cursor-pointer shadow-sm animate-greeting"
+                      style={{ animationDelay: "0.3s" }}
+                    >
+                      <Radio className="size-3.5 animate-pulse text-cyan-400" />
+                      <span>In-Browser ONNX ML Active (WebAssembly/WebGL) • Get Free Optical & SAR Data</span>
+                      <ExternalLink className="size-3 text-cyan-400" />
+                    </button>
+                  </div>
                   <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto animate-greeting" style={{ animationDelay: "0.4s" }}>
                     {t("input.placeholder.empty").replace("...", ". ") + t("input.formats").split("·").slice(0, 3).join("·") + "..."}
                   </p>
@@ -1516,15 +1874,58 @@ export default function Index() {
                     return null;
                   })}
 
-                  {busy && (
-                    <div className="flex gap-4 items-start mb-8">
-                      <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-cyan-500 text-white mt-1 shadow-lg shadow-cyan-500/20">
-                        <Bot className="size-4" />
+                  {isCurrentChatBusy && (
+                    <div className="flex gap-4 items-start mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div className="shrink-0 flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white mt-1 shadow-lg shadow-cyan-500/30 ring-1 ring-cyan-300/30 relative overflow-hidden">
+                        <Satellite className="size-4 animate-pulse relative z-10" />
+                        <div className="absolute inset-0 bg-white/20 animate-ping rounded-xl opacity-20" />
                       </div>
-                      <div className="rounded-2xl bg-[#0c1428]/80 backdrop-blur-sm border border-white/8 shadow-lg px-6 py-5 min-w-0 flex-1">
-                        <div className="flex items-center gap-3">
-                          <Loader2 className="size-4 animate-spin text-cyan-400 shrink-0" />
-                          <p className="text-[15px] font-bold text-white">{progressText || t("processing")}</p>
+
+                      <div className="rounded-2xl bg-gradient-to-b from-[#0c1428]/95 via-[#080d1a]/95 to-[#050811]/95 backdrop-blur-xl border border-cyan-500/25 shadow-[0_4px_25px_rgba(6,182,212,0.12)] p-5 min-w-0 flex-1 relative overflow-hidden">
+                        {/* Animated laser sweep effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-full animate-[shimmerSweep_2s_infinite] pointer-events-none" />
+
+                        {/* Top telemetry header */}
+                        <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-white/8 text-[11px]">
+                          <div className="flex items-center gap-2">
+                            <div className="relative flex size-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full size-2 bg-cyan-400"></span>
+                            </div>
+                            <span className="font-mono text-cyan-300 uppercase tracking-widest font-semibold">
+                              {t("app.title") || "EARTH QUERY LENS"} • ORBITAL ANALYSIS
+                            </span>
+                          </div>
+                          <span className="font-mono text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                            SPECTRAL PASS ACTIVE
+                          </span>
+                        </div>
+
+                        {/* Main status indicator */}
+                        <div className="flex items-center gap-3.5">
+                          <div className="relative shrink-0 flex items-center justify-center size-8 rounded-lg bg-cyan-500/10 border border-cyan-400/30">
+                            <Loader2 className="size-4 text-cyan-400 animate-spin" />
+                            <div className="absolute inset-0 rounded-lg ring-1 ring-cyan-400/40 animate-pulse" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+                              <span>{currentChatProgress || t("processing")}</span>
+                              <span className="inline-flex gap-0.5">
+                                <span className="size-1 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.3s]"></span>
+                                <span className="size-1 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.15s]"></span>
+                                <span className="size-1 rounded-full bg-cyan-400 animate-bounce"></span>
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
+                              Inferring multi-band cross-temporal changes & geospatial telemetry...
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Glowing progress rail */}
+                        <div className="mt-3.5 h-1 w-full bg-slate-800/80 rounded-full overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 w-2/3 rounded-full animate-[progressPulse_2s_ease-in-out_infinite]" />
                         </div>
                       </div>
                     </div>
@@ -1603,9 +2004,9 @@ export default function Index() {
                     rows={1}
                     className="flex-1 resize-none bg-transparent text-[15px] text-white placeholder:text-slate-500 outline-none py-1.5 leading-relaxed min-h-[36px] max-h-[200px]"
                   />
-                  <button onClick={() => void submit()} disabled={busy || (!query.trim() && pendingImages.length === 0)}
+                  <button onClick={() => void submit()} disabled={isCurrentChatBusy || (!query.trim() && pendingImages.length === 0)}
                     className="shrink-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all mb-0.5 shadow-sm shadow-cyan-500/20">
-                    {busy ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
+                    {isCurrentChatBusy ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
                   </button>
                 </div>
 
