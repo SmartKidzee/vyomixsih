@@ -93,12 +93,14 @@
     border-color: var(--color-border);
   }
 
-  html, body {
-    height: 100%;
-    overflow: hidden;
+  html {
+    min-height: 100%;
+    overflow-x: clip;
   }
 
   body {
+    min-height: 100%;
+    overflow-x: clip;
     background-color: var(--background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
@@ -375,4 +377,25 @@
     transform: translateX(200%);
     width: 30%;
   }
+}
+
+/* KaTeX Formula Display Enhancements for Deep Space Dark Theme */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0 !important;
+  border-radius: 0.75rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  text-align: center;
+}
+
+.katex {
+  font-size: 1.05em;
+  color: #e2e8f0;
+}
+
+.katex-display > .katex {
+  color: #7dd3fc;
 }

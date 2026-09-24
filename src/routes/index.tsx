@@ -1,13 +1,17 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   Satellite, Send, Paperclip, X, Loader2, AlertCircle, ChevronDown,
   ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3,
   Menu, Map as MapIcon, MessageSquare, Eye, Rocket, ZoomIn, TrendingUp,
-  Compass, Scale, Radio, Sun, ExternalLink, DownloadCloud, Info
+  Compass, Scale, Radio, Sun, ExternalLink, DownloadCloud, Info, Globe,
+  Mic, MicOff, Volume2, VolumeX, Home, Share2
 } from "lucide-react";
+import { ChatShareModal } from "@/components/ChatShareModal";
 import { BackendSettings } from "@/components/BackendSettings";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MapSelector } from "@/components/MapSelector";
+import ThoughtLine from "@/components/ThoughtLine";
 import {
   humanizeError, formatConfidence, confidenceRatio,
   type AnalysisResponse, type BoundingBox, type LandCoverMetrics, type FeatureMetric,
@@ -16,7 +20,18 @@ import {
 import { useI18n, SPACE_GREETINGS, ALL_SUGGESTIONS, type Language } from "@/lib/i18n";
 import localforage from "localforage";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { generateChatTitle, extractSmartFallbackTitle, getApiKey, runOrchestration, analyzeWithGeoChat, translateText } from "@/services/geminiService";
+import {
+  speakText,
+  stopSpeaking,
+  startVoiceRecognition,
+  isSpeechRecognitionSupported,
+  transliterateToIndicScript,
+  VOICE_LANGUAGES,
+} from "@/services/ttsService";
 import {
   BarChart, Bar, AreaChart, Area, RadarChart, Radar, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis, LineChart, Line, XAxis, YAxis,
@@ -95,6 +110,25 @@ function AnimatedGreeting({ text }: { text: string }) {
 /* BBox canvas overlay */
 function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; boxes: BoundingBox[]; label?: string; isLightbox?: boolean; onClick?: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    try {
+      const dataUrl = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      const cleanLabel = (label || "satellite-highlight").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+      a.download = `${cleanLabel}-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.warn("Failed downloading canvas image", err);
+    }
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -155,6 +189,15 @@ function BboxCanvas({ url, boxes, label, isLightbox, onClick }: { url: string; b
   return (
     <div className={`relative ${isLightbox ? "max-h-[85vh] max-w-[85vw] flex items-center justify-center" : `group ${onClick ? "cursor-zoom-in" : ""}`}`} onClick={onClick}>
       {label && <div className="absolute top-2 left-2 z-10 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm border border-white/10">{label}</div>}
+      <button
+        type="button"
+        onClick={handleDownload}
+        title="Download highlighted image"
+        className="absolute top-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white text-[11px] font-medium border border-white/20 backdrop-blur-md shadow-lg transition-all hover:scale-105 cursor-pointer opacity-90 hover:opacity-100"
+      >
+        <DownloadCloud className="size-3.5 text-cyan-400" />
+        <span>Download</span>
+      </button>
       <canvas ref={canvasRef} className={`rounded-2xl border border-white/10 object-contain shadow-sm bg-[#0c1428] ${isLightbox ? "max-h-[85vh] max-w-[85vw] w-auto h-auto" : "w-full max-h-80"}`} />
     </div>
   );
@@ -780,16 +823,47 @@ function ChangeChart({ result }: { result: AnalysisResponse }) {
 
 /* In-Browser ONNX ML Optical & SAR Fusion Card */
 function OpticalSarCard({ data }: { data: OpticalSarResult }) {
+  const { t, lang, translateDynamic } = useI18n();
   const [open, setOpen] = useState(true);
-  const opticalItems = Array.isArray(data.optical_evidence)
+  const rawOptical = Array.isArray(data.optical_evidence)
     ? data.optical_evidence
     : data.optical_evidence ? [data.optical_evidence] : [];
-  const sarItems = Array.isArray(data.sar_evidence)
+  const rawSar = Array.isArray(data.sar_evidence)
     ? data.sar_evidence
     : data.sar_evidence ? [data.sar_evidence] : [];
-  const compItems = Array.isArray(data.complementary)
+  const rawComp = Array.isArray(data.complementary)
     ? data.complementary
     : data.complementary ? [data.complementary] : [];
+
+  const [opticalItems, setOpticalItems] = useState<string[]>(rawOptical);
+  const [sarItems, setSarItems] = useState<string[]>(rawSar);
+  const [compItems, setCompItems] = useState<string[]>(rawComp);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (lang === "en") {
+      setOpticalItems(rawOptical);
+      setSarItems(rawSar);
+      setCompItems(rawComp);
+      return;
+    }
+
+    Promise.all(rawOptical.map(i => translateDynamic(i))).then(res => {
+      if (!cancelled) setOpticalItems(res);
+    }).catch(() => {});
+
+    Promise.all(rawSar.map(i => translateDynamic(i))).then(res => {
+      if (!cancelled) setSarItems(res);
+    }).catch(() => {});
+
+    Promise.all(rawComp.map(i => translateDynamic(i))).then(res => {
+      if (!cancelled) setCompItems(res);
+    }).catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, data]);
 
   return (
     <div className="rounded-2xl border border-cyan-500/25 bg-[#0a1224]/90 backdrop-blur-md p-4 shadow-xl shadow-cyan-950/20 overflow-hidden animate-in fade-in duration-300">
@@ -799,11 +873,9 @@ function OpticalSarCard({ data }: { data: OpticalSarResult }) {
             <Radio className="size-4 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-white">In-Browser ONNX ML Pipeline</h4>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold">WebAssembly / WebGL</span>
-            </div>
-            <p className="text-[11px] text-slate-400">100% Free Client-Side Optical (NDVI/NDWI) & SAR (Lee Filter & Backscatter dB)</p>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+              {t("sarOptical.synergyTitle") || "Optical & SAR Multi-Sensor Fusion"}
+            </h4>
           </div>
         </div>
         <button className="text-slate-400 hover:text-white transition-colors p-1" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
@@ -817,7 +889,9 @@ function OpticalSarCard({ data }: { data: OpticalSarResult }) {
           <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
             <div className="flex items-center gap-2">
               <Sun className="size-3.5 text-amber-400" />
-              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">Optical Multi-Spectral Indices</span>
+              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                {t("sarOptical.opticalTitle") || "Optical Multi-Spectral Indices"}
+              </span>
             </div>
             <ul className="space-y-1.5 text-xs text-slate-300">
               {opticalItems.map((item, idx) => (
@@ -833,7 +907,9 @@ function OpticalSarCard({ data }: { data: OpticalSarResult }) {
           <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 space-y-2">
             <div className="flex items-center gap-2">
               <Radio className="size-3.5 text-violet-400" />
-              <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">SAR Synthetic Aperture Radar</span>
+              <span className="text-xs font-bold text-violet-300 uppercase tracking-wider">
+                {t("sarOptical.sarTitle") || "SAR Synthetic Aperture Radar"}
+              </span>
             </div>
             <ul className="space-y-1.5 text-xs text-slate-300">
               {sarItems.map((item, idx) => (
@@ -850,7 +926,9 @@ function OpticalSarCard({ data }: { data: OpticalSarResult }) {
             <div className="md:col-span-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 space-y-2">
               <div className="flex items-center gap-2">
                 <Compass className="size-3.5 text-emerald-400" />
-                <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">Cross-Modality Synergy</span>
+                <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
+                  {t("sarOptical.synergyTitle") || "Cross-Modality Synergy"}
+                </span>
               </div>
               <ul className="space-y-1.5 text-xs text-slate-300">
                 {compItems.map((item, idx) => (
@@ -868,69 +946,70 @@ function OpticalSarCard({ data }: { data: OpticalSarResult }) {
   );
 }
 
-/* Modal with Direct Links & Instructions to Download Free Optical & SAR Satellite Imagery */
-function TestDataModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  if (!open) return null;
+const chatTranslationCache = new Map<string, string>();
+
+/* Dynamically translated session title in sidebar */
+function SessionTitle({ title, isJustTitled }: { title: string; isJustTitled: boolean }) {
+  const { lang, translateDynamic } = useI18n();
+  const [displayTitle, setDisplayTitle] = useState(title);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (lang === "en" || !title || title === "Analyzing Scene...") {
+      setDisplayTitle(title);
+      return;
+    }
+
+    const cacheKey = `title_${title}_${lang}`;
+    if (chatTranslationCache.has(cacheKey)) {
+      setDisplayTitle(chatTranslationCache.get(cacheKey)!);
+      return;
+    }
+
+    translateDynamic(title)
+      .then((tr) => {
+        if (!cancelled && tr) {
+          chatTranslationCache.set(cacheKey, tr);
+          setDisplayTitle(tr);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [title, lang]);
+
   return (
-    <div className="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
-      <div className="relative w-full max-w-xl rounded-2xl border border-cyan-500/20 bg-[#0c1425] p-6 shadow-2xl text-left animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors">
-          <X className="size-5" />
-        </button>
-        <div className="flex items-center gap-2.5 mb-2">
-          <DownloadCloud className="size-5 text-cyan-400" />
-          <h3 className="text-base font-bold text-white font-serif">Free Optical & SAR Test Satellite Data</h3>
-        </div>
-        <p className="text-xs text-slate-400 mb-5 leading-relaxed">
-          Download real Sentinel-1 SAR (Radar) and Sentinel-2 Optical imagery for free with zero credit cards.
-        </p>
-
-        <div className="space-y-3.5 text-xs text-slate-200">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-cyan-300 text-sm">1. Copernicus Browser (Fastest & Free)</span>
-              <a href="https://browser.dataspace.copernicus.eu/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-bold text-cyan-400 hover:underline">
-                Visit Portal <ExternalLink className="size-3" />
-              </a>
-            </div>
-            <p className="text-slate-300">
-              European Space Agency portal. Select <strong>Sentinel-1</strong> (radar microwave) or <strong>Sentinel-2</strong> (optical multi-spectral). Click the download camera button on the right for immediate high-res PNG or GeoTIFF.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-violet-300 text-sm">2. ASF Vertex (Alaska Satellite Facility)</span>
-              <a href="https://search.asf.alaska.edu/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-bold text-violet-400 hover:underline">
-                Visit Portal <ExternalLink className="size-3" />
-              </a>
-            </div>
-            <p className="text-slate-300">
-              The world's premier NASA/ESA SAR portal. Free access to Sentinel-1 C-Band synthetic aperture radar datasets, GRD amplitudes, and interferometric pairs.
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-amber-300 text-sm">3. USGS EarthExplorer</span>
-              <a href="https://earthexplorer.usgs.gov/" target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-bold text-amber-400 hover:underline">
-                Visit Portal <ExternalLink className="size-3" />
-              </a>
-            </div>
-            <p className="text-slate-300">
-              US Geological Survey hub for Landsat 8/9, Sentinel optical archives, and global digital elevation models (DEMs).
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-colors">
-            Got It
-          </button>
-        </div>
-      </div>
-    </div>
+    <span
+      className={`truncate ${
+        isJustTitled
+          ? "font-semibold bg-gradient-to-r from-cyan-200 via-white to-cyan-300 bg-clip-text text-transparent animate-in fade-in zoom-in-95 duration-500"
+          : ""
+      }`}
+    >
+      {displayTitle}
+    </span>
   );
+}
+
+/**
+ * Normalizes Markdown strings before rendering:
+ * 1. Converts collapsed single-line table rows (e.g. `| col1 | col2 | | val1 | val2 |`) into newline-separated GFM table rows.
+ * 2. Ensures markdown tables have clean line breaks before and after to trigger GFM table parsing.
+ * 3. Formats block display math ($$...$$) onto clean dedicated lines for KaTeX block rendering.
+ */
+function normalizeMarkdownForDisplay(src: string): string {
+  if (!src) return "";
+  let out = src;
+  // If table rows are joined by | | on the same line, split them with a single newline:
+  out = out.replace(/\|\s*\|\s*/g, "|\n| ");
+  // Ensure tables preceded/followed by normal text have an empty line before and after
+  out = out.replace(/([^\n|])\n(\|)/g, "$1\n\n$2");
+  out = out.replace(/(\|)\n([^\n|])/g, "$1\n\n$2");
+  // Put display math on clean separate block lines
+  out = out.replace(/\$\$([^\n$]+?)\$\$/g, (_m, formula) => `\n\n$$\n${formula.trim()}\n$$\n\n`);
+  return out;
 }
 
 /* Assistant bubble */
@@ -940,11 +1019,162 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
   const [expandedChip, setExpandedChip] = useState<number | null>(null);
   const conf = formatConfidence(r.confidence);
   const ratio = confidenceRatio(r.confidence);
-  const { t } = useI18n();
+  const { t, lang, translateDynamic } = useI18n();
   
-  // Use translated text if available
-  const displayAnswer = msg.translatedAnswer || r.answer || r.caption || "No analysis returned.";
-  const isBiTemporal = msg.images && msg.images.length > 1;
+  const rawAnswer = r.answer || r.caption || "No analysis returned.";
+  
+  // Translation state for dynamic language switching across 22+ languages
+  const [displayAnswer, setDisplayAnswer] = useState<string>(() => {
+    if (lang === "en") return rawAnswer;
+    const cacheKey = `${msg.id || rawAnswer.slice(0, 40)}_${lang}`;
+    if (chatTranslationCache.has(cacheKey)) return chatTranslationCache.get(cacheKey)!;
+    return msg.translatedAnswer || rawAnswer;
+  });
+
+  const normalizedDisplayAnswer = useMemo(() => {
+    return normalizeMarkdownForDisplay(displayAnswer);
+  }, [displayAnswer]);
+
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const isSpeakingRef = useRef(false);
+  isSpeakingRef.current = isSpeaking;
+
+  useEffect(() => {
+    return () => {
+      if (isSpeakingRef.current) {
+        stopSpeaking();
+      }
+    };
+  }, []);
+
+  const handleToggleSpeak = () => {
+    if (isSpeaking) {
+      stopSpeaking();
+      setIsSpeaking(false);
+    } else {
+      setIsSpeaking(true);
+      speakText(
+        displayAnswer,
+        lang,
+        () => setIsSpeaking(true),
+        () => setIsSpeaking(false),
+        () => setIsSpeaking(false)
+      );
+    }
+  };
+
+  // Dynamic translation for change detection description
+  const rawChangeDesc = r.change?.description;
+  const [displayChangeDesc, setDisplayChangeDesc] = useState<string | undefined>(rawChangeDesc);
+
+  // Dynamic translation for task label
+  const rawTask = r.task ?? "Satellite Analysis";
+  const [displayTask, setDisplayTask] = useState<string>(rawTask);
+
+  // Dynamic translation for evidence details
+  const [translatedEvidence, setTranslatedEvidence] = useState<Record<number, { label?: string; detail?: string }>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (lang === "en") {
+      setDisplayAnswer(rawAnswer);
+      setDisplayChangeDesc(rawChangeDesc);
+      setDisplayTask(rawTask);
+      return;
+    }
+
+    const answerKey = `${msg.id || rawAnswer.slice(0, 40)}_${lang}`;
+    if (chatTranslationCache.has(answerKey)) {
+      setDisplayAnswer(chatTranslationCache.get(answerKey)!);
+    } else {
+      setIsTranslating(true);
+      translateDynamic(rawAnswer)
+        .then((translated) => {
+          if (!cancelled && translated) {
+            chatTranslationCache.set(answerKey, translated);
+            setDisplayAnswer(translated);
+          }
+        })
+        .catch((err) => {
+          console.warn("[AssistantBubble] Translation failed:", err);
+        })
+        .finally(() => {
+          if (!cancelled) setIsTranslating(false);
+        });
+    }
+
+    if (rawChangeDesc) {
+      const changeKey = `change_${msg.id || rawChangeDesc.slice(0, 30)}_${lang}`;
+      if (chatTranslationCache.has(changeKey)) {
+        setDisplayChangeDesc(chatTranslationCache.get(changeKey)!);
+      } else {
+        translateDynamic(rawChangeDesc).then((tr) => {
+          if (!cancelled && tr) {
+            chatTranslationCache.set(changeKey, tr);
+            setDisplayChangeDesc(tr);
+          }
+        }).catch(() => {});
+      }
+    }
+
+    if (rawTask) {
+      const taskKey = `task_${rawTask}_${lang}`;
+      if (chatTranslationCache.has(taskKey)) {
+        setDisplayTask(chatTranslationCache.get(taskKey)!);
+      } else {
+        translateDynamic(rawTask).then((tr) => {
+          if (!cancelled && tr) {
+            chatTranslationCache.set(taskKey, tr);
+            setDisplayTask(tr);
+          }
+        }).catch(() => {});
+      }
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, rawAnswer, rawChangeDesc, rawTask, msg.id]);
+
+  useEffect(() => {
+    if (expandedChip === null || lang === "en" || !r.evidence) return;
+    const e = (r.evidence as any[])[expandedChip];
+    const detail = typeof e === "string" ? e : (e?.detail ?? e?.description ?? null);
+    const label = typeof e === "string" ? e : (e?.label ?? e?.type ?? "Evidence");
+
+    let cancelled = false;
+    const evKey = `ev_${expandedChip}_${detail || label}_${lang}`;
+    if (chatTranslationCache.has(evKey)) {
+      try {
+        const parsed = JSON.parse(chatTranslationCache.get(evKey)!);
+        setTranslatedEvidence(prev => ({ ...prev, [expandedChip]: parsed }));
+      } catch (_) {}
+      return;
+    }
+
+    Promise.all([
+      label ? translateDynamic(label) : Promise.resolve(label),
+      detail ? translateDynamic(detail) : Promise.resolve(detail)
+    ]).then(([trLabel, trDetail]) => {
+      if (!cancelled) {
+        const item = { label: trLabel || label, detail: trDetail || detail };
+        chatTranslationCache.set(evKey, JSON.stringify(item));
+        setTranslatedEvidence(prev => ({ ...prev, [expandedChip]: item }));
+      }
+    }).catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [expandedChip, lang, r.evidence]);
+
+  const isBiTemporal = Boolean(msg.images && msg.images.length > 1);
+  const shouldShowConfidence = Boolean(
+    conf && ratio !== null && (
+      (isBiTemporal && r.change) ||
+      (msg.images && msg.images.length > 0 && r.grounding && r.grounding.length > 0)
+    )
+  );
 
   return (
     <div className="flex gap-4 items-start mb-8">
@@ -957,13 +1187,93 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <Sparkles className="size-4 text-cyan-400 shrink-0" />
             <span className="text-xs font-bold tracking-widest uppercase text-slate-400">
-              {r.task ?? "Satellite Analysis"}
+              {displayTask}
             </span>
+            {isTranslating ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-cyan-400 animate-pulse ml-auto bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-full">
+                <Globe className="size-3 animate-spin" />
+                <span>{t("translating") || "Translating..."}</span>
+              </span>
+            ) : lang !== "en" ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full ml-auto">
+                <Globe className="size-3" />
+                <span className="uppercase font-bold">{lang}</span>
+              </span>
+            ) : null}
+
+            {/* Free Neural Google/Indic TTS Playback */}
+            <button
+              type="button"
+              onClick={handleToggleSpeak}
+              className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
+                isTranslating || lang !== "en" ? "ml-1" : "ml-auto"
+              } ${
+                isSpeaking
+                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300 ring-1 ring-rose-400/40 animate-pulse"
+                  : "bg-white/5 border-white/10 text-slate-300 hover:text-cyan-300 hover:bg-white/10"
+              }`}
+              title={isSpeaking ? (t("voice.stopSpeaking") || "Stop speaking") : (t("voice.speakResponse") || "Read response aloud (TTS)")}
+            >
+              {isSpeaking ? (
+                <>
+                  <VolumeX className="size-3.5 text-rose-400" />
+                  <span className="text-[11px] font-mono text-rose-300">{t("voice.stopSpeaking") || "Stop"}</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="size-3.5 text-cyan-400" />
+                  <span className="text-[11px] font-mono text-slate-400 group-hover:text-cyan-300">TTS</span>
+                </>
+              )}
+            </button>
           </div>
           <div className="text-slate-200 text-sm sm:text-[15px] leading-relaxed font-sans prose-space max-w-none">
-            <ReactMarkdown>{displayAnswer}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[rehypeKatex]}
+              components={{
+                table: ({ node, ...props }) => (
+                  <div className="my-4 w-full overflow-x-auto rounded-xl border border-white/10 bg-black/40 backdrop-blur-sm shadow-md">
+                    <table className="w-full border-collapse text-left text-xs sm:text-sm text-slate-200" {...props} />
+                  </div>
+                ),
+                thead: ({ node, ...props }) => (
+                  <thead className="bg-cyan-950/40 border-b border-white/15 text-cyan-300 font-semibold tracking-wider text-[11px] sm:text-xs uppercase font-mono" {...props} />
+                ),
+                th: ({ node, ...props }) => (
+                  <th className="px-3.5 py-2.5 font-bold border-r border-white/10 last:border-r-0 whitespace-nowrap" {...props} />
+                ),
+                td: ({ node, ...props }) => (
+                  <td className="px-3.5 py-2 border-t border-white/5 border-r border-white/5 last:border-r-0 leading-normal" {...props} />
+                ),
+                tr: ({ node, ...props }) => (
+                  <tr className="hover:bg-white/[0.03] transition-colors odd:bg-white/[0.01]" {...props} />
+                ),
+                p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed" {...props} />,
+                h1: ({ node, ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 flex items-center gap-2" {...props} />,
+                h2: ({ node, ...props }) => <h2 className="text-base font-bold text-cyan-200 mt-3 mb-1.5" {...props} />,
+                h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-cyan-300 mt-2.5 mb-1" {...props} />,
+                ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1 my-2 text-slate-300" {...props} />,
+                ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1 my-2 text-slate-300" {...props} />,
+                li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                code: ({ node, className, children, ...props }: any) => {
+                  const isInline = !className && typeof children === "string" && !children.includes("\n");
+                  return isInline ? (
+                    <code className="rounded bg-cyan-950/50 px-1.5 py-0.5 font-mono text-[12px] text-cyan-300 border border-cyan-500/20" {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code className="block rounded-lg bg-[#070b14] p-3 font-mono text-xs text-slate-300 border border-white/10 overflow-x-auto my-2" {...props}>
+                      {children}
+                    </code>
+                  );
+                },
+              }}
+            >
+              {normalizedDisplayAnswer}
+            </ReactMarkdown>
           </div>
-          {conf && ratio !== null && (
+          {shouldShowConfidence && ratio !== null && (
             <div className="mt-4 pt-4 border-t border-white/5">
               <div className="flex justify-between mb-1.5">
                 <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("confidence")}</span>
@@ -1035,12 +1345,18 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
                   )}
                   {detail && (
                     <div className="px-4 py-3 border-t border-white/5">
-                      <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">{label}</p>
-                      <p className="text-sm text-slate-300 leading-relaxed">{detail}</p>
+                      <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                        {translatedEvidence[expandedChip]?.label || label}
+                      </p>
+                      <p className="text-sm text-slate-300 leading-relaxed">
+                        {translatedEvidence[expandedChip]?.detail || detail}
+                      </p>
                     </div>
                   )}
                   {!detail && !previewImg?.previewUrl && (
-                    <div className="px-4 py-3 text-sm text-slate-400 italic">{label}</div>
+                    <div className="px-4 py-3 text-sm text-slate-400 italic">
+                      {translatedEvidence[expandedChip]?.label || label}
+                    </div>
                   )}
                 </div>
               );
@@ -1054,7 +1370,11 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
             <Layers className="size-4 shrink-0 mt-0.5" />
             <div>
               <p className="text-base">{r.change.change_detected ? t("changeDetected") : t("noChange")}</p>
-              {r.change.description && <p className="font-normal text-sm mt-1.5 opacity-90 text-slate-300">{r.change.description}</p>}
+              {(displayChangeDesc || r.change.description) && (
+                <p className="font-normal text-sm mt-1.5 opacity-90 text-slate-300">
+                  {displayChangeDesc || r.change.description}
+                </p>
+              )}
               {typeof r.change.changed_area_percent === "number" && (
                 <p className="font-mono text-xs opacity-80 mt-2 font-bold">{t("estimatedArea")}: {r.change.changed_area_percent.toFixed(1)}%</p>
               )}
@@ -1072,10 +1392,27 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
                     {r.grounding && r.grounding.length > 0 ? (
                       <BboxCanvas url={img.previewUrl} boxes={r.grounding} label={t("preEvent")} onClick={() => onImageClick(img.previewUrl!, r.grounding!, t("preEvent"))} />
                     ) : (
-                      <>
+                      <div className="relative group">
                         <div className="absolute top-2 left-2 z-10 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm border border-white/10">{t("preEvent")}</div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const a = document.createElement("a");
+                            a.href = img.previewUrl!;
+                            a.download = img.file.name || `satellite-image-${Date.now()}.png`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                          }}
+                          title="Download image"
+                          className="absolute top-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white text-[11px] font-medium border border-white/20 backdrop-blur-md shadow-lg transition-all hover:scale-105 cursor-pointer opacity-90 hover:opacity-100"
+                        >
+                          <DownloadCloud className="size-3.5 text-cyan-400" />
+                          <span>Download</span>
+                        </button>
                         <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-white/10 max-h-80 object-contain bg-[#0a1020] cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [], t("preEvent"))} />
-                      </>
+                      </div>
                     )}
                   </div>
                 ) : idx === 1 && img.previewUrl ? (
@@ -1083,10 +1420,27 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
                     {r.grounding && r.grounding.length > 0 ? (
                       <BboxCanvas url={img.previewUrl} boxes={r.grounding} label={t("postEvent")} onClick={() => onImageClick(img.previewUrl!, r.grounding!, t("postEvent"))} />
                     ) : (
-                      <>
+                      <div className="relative group">
                         <div className="absolute top-2 left-2 z-10 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider backdrop-blur-md shadow-sm border border-white/10">{t("postEvent")}</div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const a = document.createElement("a");
+                            a.href = img.previewUrl!;
+                            a.download = img.file.name || `satellite-image-${Date.now()}.png`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                          }}
+                          title="Download image"
+                          className="absolute top-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white text-[11px] font-medium border border-white/20 backdrop-blur-md shadow-lg transition-all hover:scale-105 cursor-pointer opacity-90 hover:opacity-100"
+                        >
+                          <DownloadCloud className="size-3.5 text-cyan-400" />
+                          <span>Download</span>
+                        </button>
                         <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-white/10 max-h-80 object-contain bg-[#0a1020] cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [], t("postEvent"))} />
-                      </>
+                      </div>
                     )}
                   </div>
                 ) : img.previewUrl ? (
@@ -1094,7 +1448,26 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
                     {r.grounding && r.grounding.length > 0 ? (
                       <BboxCanvas url={img.previewUrl} boxes={r.grounding} onClick={() => onImageClick(img.previewUrl!, r.grounding!)} />
                     ) : (
-                      <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-white/10 max-h-80 object-contain bg-[#0a1020] cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [])} />
+                      <div className="relative group">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const a = document.createElement("a");
+                            a.href = img.previewUrl!;
+                            a.download = img.file.name || `satellite-image-${Date.now()}.png`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                          }}
+                          title="Download image"
+                          className="absolute top-2 right-2 z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white text-[11px] font-medium border border-white/20 backdrop-blur-md shadow-lg transition-all hover:scale-105 cursor-pointer opacity-90 hover:opacity-100"
+                        >
+                          <DownloadCloud className="size-3.5 text-cyan-400" />
+                          <span>Download</span>
+                        </button>
+                        <img src={img.previewUrl} alt={img.file.name} className="w-full rounded-xl border border-white/10 max-h-80 object-contain bg-[#0a1020] cursor-zoom-in" onClick={() => onImageClick(img.previewUrl!, [])} />
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -1103,7 +1476,28 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
                     <span className="font-mono truncate">{img.file.name}</span>
                   </div>
                 )}
-                <p className="mt-1 text-xs text-slate-500 font-mono truncate">{img.file.name}</p>
+                <div className="flex items-center justify-between mt-1.5 px-0.5 text-xs text-slate-400 font-mono">
+                  <span className="truncate max-w-[70%]">{img.file.name}</span>
+                  {img.previewUrl && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const a = document.createElement("a");
+                        a.href = img.previewUrl!;
+                        a.download = img.file.name || `satellite-image-${Date.now()}.png`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                      }}
+                      className="flex items-center gap-1 text-[11px] text-cyan-400 hover:text-cyan-300 font-sans cursor-pointer transition-colors"
+                      title="Download image"
+                    >
+                      <DownloadCloud className="size-3.5" />
+                      <span>Download</span>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -1150,6 +1544,7 @@ export default function Index() {
   const [animatingSessionId, setAnimatingSessionId] = useState<string | null>(null);
   const [busySessionId, setBusySessionId] = useState<string | null>(null);
   const [sessionProgress, setSessionProgress] = useState<Record<string, string>>({});
+  const [sessionSteps, setSessionSteps] = useState<Record<string, string[]>>({});
   const activeSessionRef = useRef<string>("");
   const loadedSessionIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1159,10 +1554,151 @@ export default function Index() {
   const [mode, setMode] = useState<"chat" | "map">("chat");
   const [isDragging, setIsDragging] = useState(false);
   const [lightboxData, setLightboxData] = useState<{ url: string; boxes: BoundingBox[]; label?: string } | null>(null);
-  const [testDataModalOpen, setTestDataModalOpen] = useState(false);
   const [viewportAreaKm2, setViewportAreaKm2] = useState<number>(1.85);
 
-  const { t, lang } = useI18n();
+  const { t, lang, translateDynamic } = useI18n();
+
+  // Share & Export Dossier State
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareTargetSession, setShareTargetSession] = useState<ChatSession | null>(null);
+  const [shareTargetMessages, setShareTargetMessages] = useState<ChatMessage[]>([]);
+
+  const openShareForSession = async (session: ChatSession, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setShareTargetSession(session);
+    if (session.id === currentSessionId) {
+      setShareTargetMessages(messages);
+      setShareModalOpen(true);
+    } else {
+      try {
+        const saved = await localforage.getItem<ChatMessage[]>(`satquery.session_${session.id}`);
+        setShareTargetMessages(saved || []);
+      } catch (_) {
+        setShareTargetMessages([]);
+      }
+      setShareModalOpen(true);
+    }
+  };
+
+  const openShareForCurrentSession = () => {
+    const cur = sessions.find((s) => s.id === currentSessionId) || {
+      id: currentSessionId || `session-${Date.now()}`,
+      title: messages[0]?.result?.caption || "Satellite Study Dossier",
+      updatedAt: Date.now(),
+    };
+    setShareTargetSession(cur);
+    setShareTargetMessages(messages);
+    setShareModalOpen(true);
+  };
+
+  // Voice Input (Speech-To-Text) and Prompt TTS State
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeakingPrompt, setIsSpeakingPrompt] = useState(false);
+  const voiceStopRef = useRef<(() => void) | null>(null);
+  const baseQueryRef = useRef<string>("");
+
+  // Dedicated Voice Dictation Language: Defaults to Hindi 'hi' or stored preference
+  const [voiceLang, setVoiceLang] = useState<string>(() => {
+    try {
+      return localStorage.getItem("satquery.voice_lang") || (lang !== "en" ? lang : "hi");
+    } catch (_) {
+      return "hi";
+    }
+  });
+  const [voiceMenuOpen, setVoiceMenuOpen] = useState(false);
+  const voiceMenuRef = useRef<HTMLDivElement>(null);
+
+  // Sync voiceLang if user changes main app language to an Indic language
+  useEffect(() => {
+    if (lang && lang !== "en") {
+      setVoiceLang(lang);
+      try { localStorage.setItem("satquery.voice_lang", lang); } catch (_) {}
+    }
+  }, [lang]);
+
+  // Close voice dropdown on outside click
+  useEffect(() => {
+    if (!voiceMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (voiceMenuRef.current && !voiceMenuRef.current.contains(e.target as Node)) {
+        setVoiceMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [voiceMenuOpen]);
+
+  const toggleVoiceListening = () => {
+    if (isListening) {
+      if (voiceStopRef.current) {
+        voiceStopRef.current();
+        voiceStopRef.current = null;
+      }
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      baseQueryRef.current = query.trim();
+
+      const stop = startVoiceRecognition(
+        voiceLang,
+        async (sessionTranscript, isFinal) => {
+          let textToShow = sessionTranscript;
+
+          // If voice language is Hindi (or Marathi) and transcript contains Latin letters,
+          // transliterate to Devanagari Hindi so it ALWAYS arrives in Hindi!
+          if ((voiceLang === "hi" || voiceLang === "mr") && /[a-zA-Z]/.test(textToShow)) {
+            try {
+              const converted = await transliterateToIndicScript(textToShow, voiceLang);
+              if (converted && converted.trim()) {
+                textToShow = converted;
+              }
+            } catch (_) {}
+          }
+
+          const combined = baseQueryRef.current
+            ? `${baseQueryRef.current} ${textToShow}`
+            : textToShow;
+
+          setQuery(combined);
+          growTextarea();
+        },
+        (err) => {
+          console.warn("[Voice STT] Error:", err);
+          setIsListening(false);
+        },
+        () => {
+          setIsListening(false);
+        }
+      );
+      voiceStopRef.current = stop;
+    }
+  };
+
+  const toggleSpeakPrompt = () => {
+    if (isSpeakingPrompt) {
+      stopSpeaking();
+      setIsSpeakingPrompt(false);
+    } else {
+      if (!query.trim()) return;
+      setIsSpeakingPrompt(true);
+      speakText(
+        query,
+        voiceLang || lang || "hi",
+        () => setIsSpeakingPrompt(true),
+        () => setIsSpeakingPrompt(false),
+        () => setIsSpeakingPrompt(false)
+      );
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (voiceStopRef.current) {
+        voiceStopRef.current();
+      }
+      stopSpeaking();
+    };
+  }, []);
 
   useEffect(() => {
     activeSessionRef.current = currentSessionId;
@@ -1170,14 +1706,55 @@ export default function Index() {
 
   const isCurrentChatBusy = busySessionId === currentSessionId;
   const currentChatProgress = isCurrentChatBusy ? (sessionProgress[currentSessionId] || t("processing")) : "";
+  const currentChatSteps = useMemo(() => {
+    const rawSteps = sessionSteps[currentSessionId];
+    if (rawSteps && rawSteps.length > 0) {
+      return rawSteps;
+    }
+    return [
+      t("telemetry.passActive") || "Acquiring multispectral satellite bands",
+      currentChatProgress || t("processing") || "Running SatVision AI inference",
+      t("telemetry.analyzing") || "Cross-temporal change detection & geospatial synthesis"
+    ];
+  }, [sessionSteps, currentSessionId, currentChatProgress, t]);
 
-  // Randomized greeting and suggestions per language — re-pick when language changes
+  // Randomized greeting and suggestions per language — re-pick and dynamically translate when language changes
   const [greeting, setGreeting] = useState(() => getRandomGreeting(lang));
   const [suggestions, setSuggestions] = useState(() => getRandomSuggestions(lang, 4));
 
   useEffect(() => {
-    setGreeting(getRandomGreeting(lang));
-    setSuggestions(getRandomSuggestions(lang, 4));
+    let cancelled = false;
+    const baseGreeting = getRandomGreeting(lang);
+    const baseSuggestions = getRandomSuggestions(lang, 4);
+
+    if (lang === "en" || SPACE_GREETINGS[lang]) {
+      setGreeting(baseGreeting);
+    } else {
+      // Dynamically translate space greeting via Google Translate GTX direct engine
+      translateDynamic(baseGreeting).then((res) => {
+        if (!cancelled && res) setGreeting(res);
+      }).catch(() => {});
+    }
+
+    if (lang === "en" || ALL_SUGGESTIONS[lang]) {
+      setSuggestions(baseSuggestions);
+    } else {
+      // Dynamically translate suggestion cards via Google Translate GTX direct engine
+      Promise.all(baseSuggestions.map(async (s) => {
+        try {
+          const trQ = await translateDynamic(s.q);
+          return { ...s, q: trQ || s.q };
+        } catch {
+          return s;
+        }
+      })).then((res) => {
+        if (!cancelled && res) setSuggestions(res);
+      }).catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [lang]);
 
   useEffect(() => {
@@ -1420,6 +1997,16 @@ export default function Index() {
 
   const submit = async () => {
     if (isCurrentChatBusy) return;
+
+    if (isListening && voiceStopRef.current) {
+      voiceStopRef.current();
+      voiceStopRef.current = null;
+      setIsListening(false);
+    }
+    if (isSpeakingPrompt) {
+      stopSpeaking();
+      setIsSpeakingPrompt(false);
+    }
     
     const contextImages = getContextImages();
     const imgs = [...pendingImages]; 
@@ -1449,6 +2036,7 @@ export default function Index() {
     // Set busy state specifically for this session ID
     setBusySessionId(sessionIdForMsg);
     setSessionProgress(p => ({ ...p, [sessionIdForMsg]: t("initializing") }));
+    setSessionSteps(p => ({ ...p, [sessionIdForMsg]: [t("initializing") || "Initializing pipeline..."] }));
 
     const apiKey = getApiKey();
 
@@ -1480,7 +2068,7 @@ export default function Index() {
     });
 
     try {
-      const filesToAnalyze = isNewImage ? imgs.map((i) => i.file) : contextImages.map(i => i.file);
+      const filesToAnalyze = (isNewImage ? imgs.map((i) => i.file) : contextImages.map(i => i.file)).filter((f): f is File => Boolean(f));
       
       let res;
       if (messages.length === -1) {
@@ -1490,7 +2078,16 @@ export default function Index() {
         res = await runOrchestration(
           userQuery || "Analyze this context.",
           filesToAnalyze,
-          (m) => setSessionProgress(p => ({ ...p, [sessionIdForMsg]: m })),
+          (m) => {
+            setSessionProgress(p => ({ ...p, [sessionIdForMsg]: m }));
+            setSessionSteps(p => {
+              const currentList = p[sessionIdForMsg] || [];
+              if (!currentList.includes(m)) {
+                return { ...p, [sessionIdForMsg]: [...currentList, m] };
+              }
+              return p;
+            });
+          },
           undefined,
           { isFollowUp }
         );
@@ -1507,13 +2104,25 @@ export default function Index() {
         }
         getStableFeatureMetrics(res, t, res.change.total_viewport_area_km2);
       }
-      resMsg.images = isNewImage ? imgs : contextImages;
+      if (isNewImage) {
+        resMsg.images = imgs;
+      }
 
-      // Translate response if language is not English
-      if (lang !== "en" && res.answer) {
-        setSessionProgress(p => ({ ...p, [sessionIdForMsg]: t("translating") }));
+      // Translate response if language is not English or if user query was in Hindi
+      const queryIsHindi = /[\u0900-\u097F]/.test(userQuery);
+      const targetTranslateLang = lang !== "en" ? lang : (queryIsHindi ? "hi" : "en");
+      if (targetTranslateLang !== "en" && res.answer) {
+        const trMsg = t("translating") || "Translating response...";
+        setSessionProgress(p => ({ ...p, [sessionIdForMsg]: trMsg }));
+        setSessionSteps(p => {
+          const currentList = p[sessionIdForMsg] || [];
+          if (!currentList.includes(trMsg)) {
+            return { ...p, [sessionIdForMsg]: [...currentList, trMsg] };
+          }
+          return p;
+        });
         try {
-          const translated = await translateText(res.answer, lang);
+          const translated = await translateText(res.answer, targetTranslateLang);
           resMsg.translatedAnswer = translated;
         } catch (e) {
           console.warn("Translation failed, using original", e);
@@ -1593,6 +2202,11 @@ export default function Index() {
         delete next[sessionIdForMsg];
         return next;
       });
+      setSessionSteps(p => {
+        const next = { ...p };
+        delete next[sessionIdForMsg];
+        return next;
+      });
     }
   };
 
@@ -1612,12 +2226,37 @@ export default function Index() {
           className="fixed inset-0 z-[99999] bg-black/90 flex items-center justify-center p-4 sm:p-8 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer" 
           onClick={() => setLightboxData(null)}
         >
-          <button 
-            className="absolute top-6 right-6 text-white p-2.5 bg-white/10 hover:bg-white/25 rounded-full transition-all backdrop-blur-md cursor-pointer z-50 border border-white/10 hover:scale-105 shadow-lg" 
-            onClick={(e) => { e.stopPropagation(); setLightboxData(null); }}
-          >
-            <X className="size-6" />
-          </button>
+          <div className="absolute top-6 right-6 flex items-center gap-2.5 z-50">
+            <button 
+              className="flex items-center gap-1.5 text-white px-3.5 py-2 bg-white/10 hover:bg-white/25 rounded-full transition-all backdrop-blur-md cursor-pointer border border-white/10 hover:scale-105 shadow-lg text-xs font-semibold" 
+              onClick={(e) => {
+                e.stopPropagation();
+                const canvas = document.querySelector(".fixed canvas") as HTMLCanvasElement | null;
+                const link = document.createElement("a");
+                if (canvas && lightboxData.boxes.length > 0) {
+                  link.href = canvas.toDataURL("image/png");
+                  link.download = `${(lightboxData.label || "satellite-highlight").toLowerCase().replace(/[^a-z0-9_-]/g, "-")}-${Date.now()}.png`;
+                } else {
+                  link.href = lightboxData.url;
+                  link.download = `${(lightboxData.label || "satellite-image").toLowerCase().replace(/[^a-z0-9_-]/g, "-")}-${Date.now()}.png`;
+                }
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              title="Download image"
+            >
+              <DownloadCloud className="size-4 text-cyan-400" />
+              <span>Download</span>
+            </button>
+            <button 
+              className="text-white p-2.5 bg-white/10 hover:bg-white/25 rounded-full transition-all backdrop-blur-md cursor-pointer border border-white/10 hover:scale-105 shadow-lg" 
+              onClick={(e) => { e.stopPropagation(); setLightboxData(null); }}
+              title="Close preview"
+            >
+              <X className="size-5" />
+            </button>
+          </div>
           <div 
             className="relative max-h-[90vh] max-w-[90vw] flex items-center justify-center cursor-default" 
             onClick={(e) => e.stopPropagation()}
@@ -1630,9 +2269,6 @@ export default function Index() {
           </div>
         </div>
       )}
-
-      {/* Free Test Data Modal */}
-      <TestDataModal open={testDataModalOpen} onClose={() => setTestDataModalOpen(false)} />
 
       {isDragging && (
         <div className="fixed inset-0 z-[9999] bg-cyan-500/5 backdrop-blur-[2px] border-4 border-dashed border-cyan-400/50 flex items-center justify-center transition-all m-4 rounded-3xl">
@@ -1655,17 +2291,24 @@ export default function Index() {
       
       {/* Sidebar */}
       <div className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-64 border-r border-white/8 bg-[#080e1e]/95 backdrop-blur-xl transform transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="p-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-cyan-500/15 border border-white/10 bg-[#080e1e] p-1">
-              <img src="/logo.svg" alt="Earth Query Lens" className="size-full object-contain" />
+        <div className="p-4 flex items-center justify-between gap-2 border-b border-white/5">
+          <Link to="/" className="flex items-center gap-2.5 group hover:opacity-85 transition-opacity" title="Return to Home">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full overflow-hidden shadow-md shadow-cyan-500/20 border border-cyan-400/30 bg-[#080e1e] p-1">
+              <img src="/logo.svg" alt="VYOMIX" className="size-full object-contain" />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-white font-serif tracking-tight">{t("app.title")}</h1>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-sky-200 uppercase font-sans">
+                  VYOMIX
+                </span>
+                <span className="text-[10px] text-slate-600 font-light">|</span>
+                <h1 className="text-xs font-bold text-white tracking-tight truncate">{t("app.title")}</h1>
+              </div>
+              <span className="text-[9px] font-mono text-cyan-400/80">SIH 2026 GEOSPATIAL</span>
             </div>
-          </div>
-          <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
-            <X className="size-5 text-slate-400" />
+          </Link>
+          <button className="md:hidden p-1 text-slate-400 hover:text-white" onClick={() => setSidebarOpen(false)}>
+            <X className="size-5" />
           </button>
         </div>
         
@@ -1714,9 +2357,7 @@ export default function Index() {
                       Analyzing Scene...
                     </span>
                   ) : (
-                    <span className={`truncate ${isJustTitled ? 'font-semibold bg-gradient-to-r from-cyan-200 via-white to-cyan-300 bg-clip-text text-transparent animate-in fade-in zoom-in-95 duration-500' : ''}`}>
-                      {s.title}
-                    </span>
+                    <SessionTitle title={s.title} isJustTitled={isJustTitled} />
                   )}
                 </div>
 
@@ -1727,8 +2368,15 @@ export default function Index() {
                     </span>
                   )}
                   <button 
+                    onClick={(e) => openShareForSession(s, e)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-cyan-400 transition-all rounded-md hover:bg-cyan-500/10 cursor-pointer"
+                    title="Download Full Chat PDF (Images & Highlights)"
+                  >
+                    <DownloadCloud className="size-3" />
+                  </button>
+                  <button 
                     onClick={(e) => deleteSession(s.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all rounded-md hover:bg-red-500/10"
+                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all rounded-md hover:bg-red-500/10 cursor-pointer"
                     title={t("sidebar.deleteChat")}
                   >
                     <X className="size-3" />
@@ -1757,6 +2405,14 @@ export default function Index() {
             <button className="md:hidden" onClick={() => setSidebarOpen(true)}>
               <Menu className="size-5 text-slate-300" />
             </button>
+            <Link
+              to="/"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/8 transition-colors shrink-0"
+              title="Return to Home"
+            >
+              <Home className="size-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Home</span>
+            </Link>
             <div className="flex bg-white/5 p-1 rounded-xl border border-white/8">
               <button 
                 onClick={() => setMode("chat")}
@@ -1771,14 +2427,16 @@ export default function Index() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setTestDataModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold rounded-xl bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 hover:bg-cyan-500/20 transition-all cursor-pointer shadow-sm"
-              title="Where to get free Optical & SAR satellite imagery"
-            >
-              <DownloadCloud className="size-3.5" />
-              <span className="hidden sm:inline">Free Optical & SAR Data</span>
-            </button>
+            {messages.length > 0 && (
+              <button
+                onClick={openShareForCurrentSession}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border border-cyan-400/30 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 hover:text-white backdrop-blur-sm cursor-pointer shadow-sm hover:shadow-cyan-500/20 active:scale-95"
+                title="Download Full Chat PDF (with Images & Highlights)"
+              >
+                <DownloadCloud className="size-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Export PDF</span>
+              </button>
+            )}
             <LanguageSwitcher />
             <BackendSettings />
           </div>
@@ -1795,17 +2453,6 @@ export default function Index() {
               {messages.length === 0 && !isCurrentChatBusy ? (
                 <div className="flex flex-col items-center justify-center h-full px-4 py-12 text-center max-w-2xl mx-auto relative z-10">
                   <AnimatedGreeting text={greeting} />
-                  <div className="my-3">
-                    <button
-                      onClick={() => setTestDataModalOpen(true)}
-                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 text-xs font-semibold text-cyan-300 transition-all cursor-pointer shadow-sm animate-greeting"
-                      style={{ animationDelay: "0.3s" }}
-                    >
-                      <Radio className="size-3.5 animate-pulse text-cyan-400" />
-                      <span>In-Browser ONNX ML Active (WebAssembly/WebGL) • Get Free Optical & SAR Data</span>
-                      <ExternalLink className="size-3 text-cyan-400" />
-                    </button>
-                  </div>
                   <p className="text-slate-400 text-lg mb-8 max-w-md mx-auto animate-greeting" style={{ animationDelay: "0.4s" }}>
                     {t("input.placeholder.empty").replace("...", ". ") + t("input.formats").split("·").slice(0, 3).join("·") + "..."}
                   </p>
@@ -1835,6 +2482,22 @@ export default function Index() {
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
                                       <ZoomIn className="size-5 text-white drop-shadow-lg" />
                                     </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const a = document.createElement("a");
+                                        a.href = img.previewUrl!;
+                                        a.download = img.file.name || `uploaded-${Date.now()}.png`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                      }}
+                                      title="Download image"
+                                      className="absolute top-1.5 right-1.5 z-10 flex items-center justify-center size-6 rounded-md bg-black/70 hover:bg-black/90 text-cyan-400 border border-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 hover:scale-110 transition-all cursor-pointer shadow-md"
+                                    >
+                                      <DownloadCloud className="size-3.5" />
+                                    </button>
                                   </div>
                                 ) : (
                                   <div key={img.id} className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-400 shadow-sm">
@@ -1875,58 +2538,28 @@ export default function Index() {
                   })}
 
                   {isCurrentChatBusy && (
-                    <div className="flex gap-4 items-start mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                      <div className="shrink-0 flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white mt-1 shadow-lg shadow-cyan-500/30 ring-1 ring-cyan-300/30 relative overflow-hidden">
-                        <Satellite className="size-4 animate-pulse relative z-10" />
-                        <div className="absolute inset-0 bg-white/20 animate-ping rounded-xl opacity-20" />
+                    <div className="flex gap-3.5 items-start mb-6 px-1 animate-in fade-in duration-200">
+                      <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-cyan-500/10 border border-cyan-400/20 text-cyan-400 mt-0.5">
+                        <Bot className="size-4" />
                       </div>
-
-                      <div className="rounded-2xl bg-gradient-to-b from-[#0c1428]/95 via-[#080d1a]/95 to-[#050811]/95 backdrop-blur-xl border border-cyan-500/25 shadow-[0_4px_25px_rgba(6,182,212,0.12)] p-5 min-w-0 flex-1 relative overflow-hidden">
-                        {/* Animated laser sweep effect */}
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent -translate-x-full animate-[shimmerSweep_2s_infinite] pointer-events-none" />
-
-                        {/* Top telemetry header */}
-                        <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-white/8 text-[11px]">
-                          <div className="flex items-center gap-2">
-                            <div className="relative flex size-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full size-2 bg-cyan-400"></span>
-                            </div>
-                            <span className="font-mono text-cyan-300 uppercase tracking-widest font-semibold">
-                              {t("app.title") || "EARTH QUERY LENS"} • ORBITAL ANALYSIS
-                            </span>
-                          </div>
-                          <span className="font-mono text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                            SPECTRAL PASS ACTIVE
-                          </span>
-                        </div>
-
-                        {/* Main status indicator */}
-                        <div className="flex items-center gap-3.5">
-                          <div className="relative shrink-0 flex items-center justify-center size-8 rounded-lg bg-cyan-500/10 border border-cyan-400/30">
-                            <Loader2 className="size-4 text-cyan-400 animate-spin" />
-                            <div className="absolute inset-0 rounded-lg ring-1 ring-cyan-400/40 animate-pulse" />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-slate-100 flex items-center gap-2">
-                              <span>{currentChatProgress || t("processing")}</span>
-                              <span className="inline-flex gap-0.5">
-                                <span className="size-1 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.3s]"></span>
-                                <span className="size-1 rounded-full bg-cyan-400 animate-bounce [animation-delay:-0.15s]"></span>
-                                <span className="size-1 rounded-full bg-cyan-400 animate-bounce"></span>
-                              </span>
-                            </p>
-                            <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">
-                              Inferring multi-band cross-temporal changes & geospatial telemetry...
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Glowing progress rail */}
-                        <div className="mt-3.5 h-1 w-full bg-slate-800/80 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-indigo-500 w-2/3 rounded-full animate-[progressPulse_2s_ease-in-out_infinite]" />
-                        </div>
+                      <div className="min-w-0 flex-1 py-1">
+                        <ThoughtLine
+                          working={isCurrentChatBusy}
+                          steps={currentChatSteps}
+                          label={currentChatProgress || t("processing") || "Analyzing imagery with SatVision AI…"}
+                          doneLabel={t("analysisCompleted") || "Thought for"}
+                          glyph="sparkle"
+                          fontSize={14}
+                          color="#cbd5e1"
+                          glyphColor="#22d3ee"
+                          breathPeriod={1.6}
+                          breathDepth={0.45}
+                          settleDuration={350}
+                          settleBlur={2}
+                          collapsible={true}
+                          collapseOnSettle={false}
+                          showTimer={true}
+                        />
                       </div>
                     </div>
                   )}
@@ -1988,15 +2621,108 @@ export default function Index() {
                   </div>
                 )}
 
+                {/* Active Voice Dictation Banner */}
+                {isListening && (
+                  <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-medium animate-pulse mb-2 shadow-lg shadow-rose-950/40">
+                    <span className="flex items-center gap-2">
+                      <Radio className="size-3.5 text-rose-400 animate-spin" />
+                      <span>
+                        Listening in <strong className="text-white underline">{VOICE_LANGUAGES.find(v => v.code === voiceLang)?.label || "हिन्दी"} ({voiceLang.toUpperCase()})</strong>... Speak in {voiceLang === "hi" ? "Hindi (Devanagari text)" : "selected language"}
+                      </span>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextLang = voiceLang === "hi" ? "en" : "hi";
+                          setVoiceLang(nextLang);
+                          try { localStorage.setItem("satquery.voice_lang", nextLang); } catch (_) {}
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white cursor-pointer font-medium border border-white/10"
+                      >
+                        Switch to {voiceLang === "hi" ? "English" : "हिन्दी"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={toggleVoiceListening}
+                        className="text-[11px] underline text-rose-400 hover:text-white cursor-pointer font-bold ml-1"
+                      >
+                        {t("voice.stopSpeaking") || "Stop"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-end gap-2 rounded-3xl border border-white/10 bg-[#0c1428]/70 backdrop-blur-xl px-4 py-3 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.4)] focus-within:border-cyan-400/30 focus-within:ring-2 focus-within:ring-cyan-400/15 transition-all">
                   <button onClick={() => fileInputRef.current?.click()} disabled={pendingImages.length >= 2}
                     title={t("input.attach")}
-                    className="shrink-0 flex size-9 items-center justify-center rounded-full text-slate-400 hover:text-cyan-400 hover:bg-white/5 disabled:opacity-30 transition-colors mb-0.5">
+                    className="shrink-0 flex size-9 items-center justify-center rounded-full text-slate-400 hover:text-cyan-400 hover:bg-white/5 disabled:opacity-30 transition-colors mb-0.5 cursor-pointer">
                     <Paperclip className="size-5" />
                   </button>
                   <input ref={fileInputRef} type="file" multiple
                     accept=".tif,.tiff,.geotiff,.png,.jpg,.jpeg,.jp2,.img" className="hidden"
                     onChange={(e) => { addImages(e.target.files); e.target.value = ""; }} />
+
+                  {/* Voice Dictation (Speech-To-Text) Button + Quick Language Toggle */}
+                  <div className="relative shrink-0 flex items-center mb-0.5" ref={voiceMenuRef}>
+                    <button
+                      type="button"
+                      onClick={toggleVoiceListening}
+                      title={isListening ? (t("voice.stopSpeaking") || "Stop recording") : `Voice Dictation in ${VOICE_LANGUAGES.find(v => v.code === voiceLang)?.label || "Hindi"}`}
+                      className={`shrink-0 flex size-9 items-center justify-center rounded-full transition-all cursor-pointer ${
+                        isListening
+                          ? "bg-rose-500 text-white shadow-lg shadow-rose-500/40 ring-2 ring-rose-400 animate-pulse"
+                          : "text-slate-400 hover:text-rose-400 hover:bg-white/5"
+                      }`}
+                    >
+                      {isListening ? <MicOff className="size-5" /> : <Mic className="size-5" />}
+                    </button>
+
+                    {/* Quick Voice Language Dropdown Pill */}
+                    <button
+                      type="button"
+                      onClick={() => setVoiceMenuOpen((v) => !v)}
+                      title="Select Voice Dictation Language (Hindi / English / Indic)"
+                      className="flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold text-slate-300 hover:text-cyan-300 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg ml-0.5 cursor-pointer transition-colors"
+                    >
+                      <span>{VOICE_LANGUAGES.find(v => v.code === voiceLang)?.flag || "🇮🇳"}</span>
+                      <span className="uppercase text-[10px] tracking-wide font-mono font-bold text-cyan-400">{voiceLang}</span>
+                      <ChevronDown className="size-2.5 opacity-60" />
+                    </button>
+
+                    {/* Voice Language Menu Dropdown */}
+                    {voiceMenuOpen && (
+                      <div className="absolute bottom-11 left-0 z-50 w-52 max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-[#0c1428]/95 backdrop-blur-xl p-1 shadow-2xl shadow-black/60 custom-scrollbar">
+                        <div className="px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/5 flex items-center justify-between">
+                          <span>Voice Language</span>
+                          <span className="text-cyan-400 font-mono">STT / TTS</span>
+                        </div>
+                        {VOICE_LANGUAGES.map((vl) => (
+                          <button
+                            key={vl.code}
+                            type="button"
+                            onClick={() => {
+                              setVoiceLang(vl.code);
+                              try { localStorage.setItem("satquery.voice_lang", vl.code); } catch (_) {}
+                              setVoiceMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
+                              voiceLang === vl.code
+                                ? "bg-cyan-500/20 text-cyan-300 font-bold"
+                                : "text-slate-300 hover:bg-white/5 hover:text-white"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span>{vl.flag}</span>
+                              <span>{vl.label}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono uppercase">{vl.code}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <textarea ref={textareaRef} value={query}
                     onChange={(e) => { setQuery(e.target.value); growTextarea(); }}
                     onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (query.trim() || pendingImages.length > 0) void submit(); } }}
@@ -2004,8 +2730,25 @@ export default function Index() {
                     rows={1}
                     className="flex-1 resize-none bg-transparent text-[15px] text-white placeholder:text-slate-500 outline-none py-1.5 leading-relaxed min-h-[36px] max-h-[200px]"
                   />
+
+                  {/* Free TTS Speaker button (Read Prompt Aloud) */}
+                  {query.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={toggleSpeakPrompt}
+                      title={isSpeakingPrompt ? (t("voice.stopSpeaking") || "Stop speaking") : (t("voice.speakPrompt") || "Read prompt aloud (TTS)")}
+                      className={`shrink-0 flex size-9 items-center justify-center rounded-full transition-all mb-0.5 cursor-pointer ${
+                        isSpeakingPrompt
+                          ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/40 ring-2 ring-cyan-400 animate-pulse"
+                          : "text-slate-400 hover:text-cyan-400 hover:bg-white/5"
+                      }`}
+                    >
+                      {isSpeakingPrompt ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+                    </button>
+                  )}
+
                   <button onClick={() => void submit()} disabled={isCurrentChatBusy || (!query.trim() && pendingImages.length === 0)}
-                    className="shrink-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all mb-0.5 shadow-sm shadow-cyan-500/20">
+                    className="shrink-0 flex size-9 items-center justify-center rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-400 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all mb-0.5 shadow-sm shadow-cyan-500/20 cursor-pointer">
                     {isCurrentChatBusy ? <Loader2 className="size-5 animate-spin" /> : <Send className="size-5" />}
                   </button>
                 </div>
@@ -2018,6 +2761,19 @@ export default function Index() {
           </>
         )}
       </div>
+
+      {/* GDPR-Compliant PDF & HTML Email Share Dossier Modal */}
+      {shareTargetSession && (
+        <ChatShareModal
+          isOpen={shareModalOpen}
+          onClose={() => {
+            setShareModalOpen(false);
+            setShareTargetSession(null);
+          }}
+          session={shareTargetSession}
+          messages={shareTargetMessages}
+        />
+      )}
     </div>
   );
 }

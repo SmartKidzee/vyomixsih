@@ -89,8 +89,8 @@ export function LanguageSwitcher() {
 
           {/* Footer hint */}
           <div className="px-3 py-1.5 border-t border-white/5 text-center">
-            <span className="text-[9px] text-slate-600">
-              GIGW Compliant · 22 Indian Languages + English
+            <span className="text-[10px] font-mono text-cyan-400/80">
+              22 Indian Languages + English
             </span>
           </div>
         </div>

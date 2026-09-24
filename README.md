@@ -1,195 +1,200 @@
 <div align="center">
-  <img src="public/logo.svg" alt="Earth Query Lens Logo" width="140" />
+  <img src="public/logo.svg" alt="Vyomix Earth Query Lens Logo" width="130" />
 
-  # 🌍 Earth Query Lens
-  **Multimodal Geospatial AI, In-Browser ONNX ML & High-Resolution Bi-Temporal Satellite Intelligence**
+  # 🛰️ VYOMIX · Earth Query Lens
+  ### Multimodal Satellite Intelligence · Dual-Spectrum Radar Fusion · 22-Language Indic Remote Sensing
 
-  [![React](https://img.shields.io/badge/React-19-blue.svg?style=flat&logo=react)](#)
-  [![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg?style=flat&logo=vite)](#)
-  [![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-WebAssembly%20%2F%20WebGL-005CED.svg?style=flat)](#)
-  [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-EuroSAT%20Swin-FFD21E.svg?style=flat&logo=huggingface)](#)
-  [![Bhashini](https://img.shields.io/badge/Bhashini-22%20Indian%20Languages-FF9933.svg?style=flat)](#)
-  [![CesiumJS](https://img.shields.io/badge/CesiumJS-1.145-0080FF.svg?style=flat&logo=cesium)](#)
-  [![Esri Wayback](https://img.shields.io/badge/Esri%20Wayback-2014--2026-blueviolet.svg?style=flat)](#)
+  **Smart India Hackathon 2026 (SIH 2026)** · Developed by **Shreyas J** ([@SmartKidzee](https://github.com/SmartKidzee)) & The Vyomix Team
 
   <br />
 
-  <!-- Animated Typing SVG -->
+  [![GitHub Stars](https://img.shields.io/github/stars/SmartKidzee/vyomixsih?style=flat&color=38bdf8)](https://github.com/SmartKidzee/vyomixsih)
+  [![License: MIT with Attribution](https://img.shields.io/badge/License-MIT%20Attribution-blue.svg?style=flat)](LICENSE)
+  [![React 19](https://img.shields.io/badge/React-19.2-blue.svg?style=flat&logo=react)](#)
+  [![Vite 6](https://img.shields.io/badge/Vite-6.3-646CFF.svg?style=flat&logo=vite)](#)
+  [![ONNX Runtime Web](https://img.shields.io/badge/ONNX%20Runtime-WebAssembly%20%2F%20WebGL-005CED.svg?style=flat)](#)
+  [![Indic Languages](https://img.shields.io/badge/Indic%20Languages-22%20Scheduled-FF9933.svg?style=flat)](#)
+  [![CesiumJS](https://img.shields.io/badge/CesiumJS-1.145-0080FF.svg?style=flat&logo=cesium)](#)
+  [![Security](https://img.shields.io/badge/Security-Zero%20Telemetry%20%2F%20Local--First-10b981.svg?style=flat)](SECURITY.md)
+
+  <br />
+
+  <!-- Animated Typing Banner -->
   <a href="#">
-    <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=20&duration=3000&pause=1000&color=38BDF8&center=true&vCenter=true&width=650&lines=In-Browser+ONNX+WebAssembly+Optical+%26+SAR+Tensors;EuroSAT+Sentinel-2+Bi-Temporal+Change+Detection;Bhashini+Official+Govt+API+%C2%B7+22+Indian+Languages;12%2B+Year+Wayback+Satellite+Timeline+(2014-2026);100%25+Free+Open-Data+%E2%80%94+Zero+Credit+Card+Needed" alt="Typing SVG" />
+    <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=19&duration=3000&pause=1000&color=38BDF8&center=true&vCenter=true&width=750&lines=Dual-Spectrum+Optical+%2B+Synthetic+Aperture+Radar+(SAR)+Fusion;Deterministic+GSD+Physical+Ground+Area+Calculus+(km%C2%B2+%2F+m%C2%B2);Full+Chat+Forensic+PDF+Dossier+with+Embedded+Image+Highlights;Native+Indic+Voice+STT+%26+TTS+Across+22+Scheduled+Languages;In-Browser+Local+ONNX+WebAssembly+Multi-Spectral+Pipelines" alt="Typing Banner" />
   </a>
 </div>
 
 ---
 
-## 🌟 Highlights
+## 🌟 Executive Overview
 
-**Earth Query Lens** is a next-generation geospatial AI intelligence platform designed for environmental monitoring, disaster assessment, and urban evolution tracking. It fuses **in-browser ONNX WebAssembly/WebGL neural tensor pipelines**, **serverless Earth observation foundation models**, **22-language Bhashini official translation**, and **12+ year sub-meter 3D satellite archives** into an intuitive conversational interface.
+**Vyomix · Earth Query Lens** is an operational-grade Earth observation AI platform designed for defense, environmental forensics, disaster mapping, and urban growth auditing. Built from the ground up for the **Smart India Hackathon (SIH 2026)**, it solves the critical challenges of all-weather satellite monitoring by fusing **optical multi-spectral imagery** with **Synthetic Aperture Radar (SAR)** to see through dense monsoon clouds, smoke, and darkness.
+
+The platform combines **in-browser ONNX WebAssembly neural pipelines**, **deterministic Ground Sampling Distance (GSD) mathematical calculus**, **Indic voice dictation in 22 languages**, and **one-click multi-page forensic PDF reporting** with embedded image highlights.
 
 > [!TIP]
-> **100% Free & Open — Zero Credit Card Required**: All satellite basemaps, in-browser ONNX ML models, EuroSAT change detection inference, and historical archives operate with zero credit cards, zero proprietary lock-in, and zero mandatory subscription fees.
+> **100% Free & Open-Access Data Ecosystem**: All satellite basemaps (Sentinel-1/2, NASA MODIS, Esri Wayback), in-browser ONNX ML models, EuroSAT bi-temporal classification, and Indic translation services operate with zero mandatory subscription fees or proprietary lock-in.
 
 ---
 
-## ✨ Key Capabilities
+## 🚀 Key Technological Capabilities
 
-### ⚡ 1. In-Browser ONNX ML Models (`onnxruntime-web` WebAssembly / WebGL)
+```mermaid
+flowchart LR
+    A[Satellite Pass: Optical / SAR] --> B[In-Browser Ingestion Engine]
+    B --> C[ONNX WebAssembly SIMD / WebGL]
+    B --> D[GSD Physical Area Calculus]
+    C --> E[NDVI / NDWI / NDBI & Lee Radar Filter]
+    D --> F[Deterministic Metric km² / m² / sq ft]
+    E --> G[Multimodal SatVision Reasoning]
+    F --> G
+    G --> H[Indic Voice TTS & STT in 22 Languages]
+    G --> I[Forensic PDF Dossier Export with Overlays]
+```
+
+### 🛰️ 1. Dual-Spectrum Radar Fusion (Optical + SAR C-Band)
+- **All-Weather Cloud Penetration:** Fuses Sentinel-2 optical bands with Sentinel-1 microwave Synthetic Aperture Radar (C-Band, 5.405 GHz). Penetrates monsoon precipitation, sea fog, and nighttime conditions for continuous 24/7 observation.
+- **Adaptive 5×5 Lee Speckle Filter:** Suppresses multiplicative radar speckle noise using moving-window local mean and variance kernels while strictly preserving structural edges, runways, and transport networks.
+- **Specular vs. Double-Bounce Radar Signatures:** Delineates specular water reflections ($< -16\text{ dB}$) from double-bounce urban dielectric reflections ($> -6.5\text{ dB}$).
+
+### 📐 2. Deterministic Physical Ground Area Calculus
+- **Ground Sampling Distance (GSD) Physics:** Directly calculates real-world physical area (+/- km², m², sq ft) from pixel bounding dimensions and sensor spatial resolution ($10\text{ m/px}$ Sentinel-2, $30\text{ m/px}$ Landsat, sub-meter commercial passes).
+- **Zero Hallucination Numbers:** Eliminates generative model guessing by enforcing deterministic mathematical verification across all area metrics.
+
+### 📄 3. Complete Chat Forensic PDF Dossier with Image Highlights
+- **Full Chat Interrogation History:** Compiles all conversational exchanges, queries, and assistant analyses in chronological order.
+- **Embedded Satellite Imagery & Highlights:**
+  - Automatically draws all uploaded satellite scenes directly into the PDF.
+  - Generates and embeds **highlighted bounding box passes** with translucent color-coded fills, spatial tags, and confidence metrics directly onto the canvas.
+- **Cryptographic Audit Seal:** Embeds a deterministic `VYX-SHA256-...` audit hash and letterhead classification (`OFFICIAL FORENSIC RECORD`) for regulatory and evidentiary workflows.
+
+### 🇮🇳 4. Native Indic Multilingual Voice Engine (22 Languages)
+- **Universal Translation Pipeline:** Powered by Google Translate GTX & Digital India's Bhashini ULCA services for zero-latency translation across all 22 scheduled Indian languages:
+  - हिन्दी (Hindi), ಕನ್ನಡ (Kannada), தமிழ் (Tamil), తెలుగు (Telugu), বাংলা (Bengali), मराठी (Marathi), ગુજરાતી (Gujarati), മലയാളം (Malayalam), ਪੰਜਾਬੀ (Punjabi), ଓଡ଼ିଆ (Odia), অসমীয়া (Assamese), اردو (Urdu), etc.
+- **Voice Speech-to-Text (STT) & Auditory Readout (TTS):** Natural voice interrogation with automated Indic script transliteration.
+
+### ⚡ 5. In-Browser ONNX ML Models (`onnxruntime-web`)
 - **100% Client-Side Local Execution:** Executes neural tensors and radiometric processing directly inside the browser using WebAssembly SIMD and WebGL acceleration. Zero server roundtrips, zero API token costs, and fully offline capable.
-- **Optical Multi-Spectral Indexing:**
-  - **NDVI (Normalized Difference Vegetation Index):** Evaluates photosynthetic canopy vigor and biomass density.
-  - **NDWI (Normalized Difference Water Index):** Delineates surface water bodies and flood inundation boundaries.
-  - **NDBI (Normalized Difference Built-up Index):** Quantifies impervious urban surface sprawl.
-  - **Automated Spectral Land-Cover Partitioning:** Computes exact percentage distributions for vegetation, water, built-up, and barren soil.
-- **SAR (Synthetic Aperture Radar) Signal Processing:**
-  - **Sentinel-1 C-Band Radiometric Calibration:** Simulates sigma-nought backscatter intensity and converts to logarithmic Decibels ($10 \cdot \log_{10}(I)$).
-  - **5×5 Adaptive Lee Speckle Filter:** Suppresses multiplicative radar speckle noise via moving-window local mean and variance kernels while strictly preserving high-frequency structural edges.
-  - **Specular Water Inundation Detection:** Isolates calm floodwaters and wetlands displaying low radar backscatter ($< -16\text{ dB}$).
-  - **Structural Double-Bounce Detection:** Detects high dihedral reflection signatures ($> -6.5\text{ dB}$) from urban buildings, bridges, and infrastructure.
-- **Cross-Modality Synergy (Optical + SAR):**
-  - Synthesizes optical reflectance with microwave penetration to reveal ground features through clouds, haze, and smoke.
-  - Cross-validates optical vegetation indices with radar surface roughness.
+- **Spectral Land-Cover Partitioning:** Computes NDVI (Vegetation Canopy), NDWI (Water Inundation), and NDBI (Urban Sprawl) with exact percentage splits.
+
+### 🕰️ 6. 12+ Year Esri Wayback Satellite Archives (2014–2026)
+- **Interactive Bi-Temporal Curtain Slider:** Compare baseline passes against post-event imagery over an interactive split view with NASA MODIS and VIIRS thermal telemetry.
+- **Automated Two-View Capture:** One-click automated capture of both Left and Right epochs directly into the analytical prompt pipeline.
 
 ---
 
-### 🛰️ 2. Where to Get Free Optical & SAR Satellite Data
+## 🎨 Design & User Experience Highlights
+
+- **Floating Pill Navigation Bar:** Centered floating pill navbar with rounded-full ends, glassmorphic backdrop blur, prominent VYOMIX branding, and integrated Language Switcher.
+- **Refined Magic Bento Cards:** Micro-tilt 3D cards with calibrated GSAP physics and spotlight glow effects.
+- **Full-Bleed AeroShards Hero:** Interactive WebGL chrome shard stream responding to mouse proximity and fluid physics.
+- **ScrollExpand Component:** Immersive scroll-pinned satellite unfolding transition into operational analytics.
+- **Glassmorphic Theme:** Curated HSL dark nebula space palette (`#060b18`), translucent borders, specular highlights, and high-contrast typography.
+
+---
+
+## 🌐 Free Satellite Data Sources
 
 You can download real test data for free without credit cards from these official portals:
 
-| Source | Modality | Best For | Direct Portal Link | Free? |
-| :--- | :--- | :--- | :--- | :---: |
-| **Copernicus Browser** | **Sentinel-1 SAR** & **Sentinel-2 Optical** | Instant snapshot PNGs or 16-bit GeoTIFFs across any city or river | [browser.dataspace.copernicus.eu](https://browser.dataspace.copernicus.eu/) | ✅ 100% Free |
-| **ASF Vertex** (NASA / Alaska Satellite Facility) | **Sentinel-1 C-Band SAR** | Calibrated GRD radar amplitudes, interferometric pairs | [search.asf.alaska.edu](https://search.asf.alaska.edu/) | ✅ 100% Free |
-| **USGS EarthExplorer** | **Landsat 8/9 & Sentinel Optical** | Multi-decade multispectral archives and global DEM elevation | [earthexplorer.usgs.gov](https://earthexplorer.usgs.gov/) | ✅ 100% Free |
-| **EuroSAT Dataset** | **Sentinel-2 Multi-Spectral** | 27,000 labeled patches across 10 land-cover categories | [huggingface.co/datasets/blanchon/EuroSAT_RGB](https://huggingface.co/datasets/blanchon/EuroSAT_RGB) | ✅ 100% Free |
-
-#### How to Download Test Data in 60 Seconds:
-1. Open [Copernicus Browser](https://browser.dataspace.copernicus.eu/).
-2. In the top-left search panel, check either:
-   - **Sentinel-1** (radar SAR backscatter, VV/VH polarizations)
-   - **Sentinel-2** (multispectral optical, True Color / False Color Infrared)
-3. Navigate to any area of interest (e.g. Dubai, Venice, Ganges River Delta, Amazon Basin).
-4. Click the **Camera / Download** icon on the right sidebar to export a High-Res PNG or analytical GeoTIFF.
-5. Drag and drop the downloaded file directly into Earth Query Lens!
+| Source | Modality | Best For | Direct Portal Link |
+| :--- | :--- | :--- | :--- |
+| **Copernicus Browser** | **Sentinel-1 SAR** & **Sentinel-2 Optical** | High-Res PNGs or 16-bit GeoTIFFs across any city, river, or coastline | [browser.dataspace.copernicus.eu](https://browser.dataspace.copernicus.eu/) |
+| **ASF Vertex** (NASA / Alaska Satellite Facility) | **Sentinel-1 C-Band SAR** | Calibrated GRD radar amplitudes, interferometric pairs | [search.asf.alaska.edu](https://search.asf.alaska.edu/) |
+| **USGS EarthExplorer** | **Landsat 8/9 & Sentinel Optical** | Multi-decade multispectral archives and global DEM elevation | [earthexplorer.usgs.gov](https://earthexplorer.usgs.gov/) |
+| **EuroSAT Dataset** | **Sentinel-2 Multi-Spectral** | 27,000 labeled patches across 10 land-cover categories | [huggingface.co/datasets/blanchon/EuroSAT_RGB](https://huggingface.co/datasets/blanchon/EuroSAT_RGB) |
 
 ---
 
-### 🛰️ 3. Bi-Temporal Change Detection (Hugging Face Serverless Inference)
-- **EuroSAT Swin-Transformer Engine:** Deep transformer architecture pre-trained on Sentinel-2 multi-spectral Earth observation bands.
-- **Quantitative Multi-Temporal Auditing:** Compares baseline imagery (T1) against observation imagery (T2) to compute transition probabilities and percentage shifts.
-- **Smart Conversational Follow-up:** Upon the initial bi-temporal upload, the system runs complete cross-temporal change detection and spectral verification. Subsequent conversational follow-up questions continue smoothly with contextual vision reasoning without re-triggering external inference.
+## 📁 Repository Structure
 
----
-
-### 🇮🇳 4. Multilingual Geospatial Intelligence (22 Indian Languages via Bhashini)
-- **Official Government API Integration:** Direct integration with Digital India's **Bhashini ULCA Translation Pipeline**.
-- **Complete 22 Scheduled Languages Support:**
-  - हिन्दी (Hindi), বাংলা (Bengali), తెలుగు (Telugu), मराठी (Marathi), தமிழ் (Tamil), اردو (Urdu), ગુજરાતી (Gujarati), ಕನ್ನಡ (Kannada), മലയാളം (Malayalam), ଓଡ଼ିଆ (Odia), ਪੰਜਾਬੀ (Punjabi), অসমীয়া (Assamese), मैथिली (Maithili), संस्कृतम् (Sanskrit), नेपाली (Nepali), कोंकणी (Konkani), ডোগরী (Dogri), सिन्धी (Sindhi), Bodo, Santali, Kashmiri, Manipuri.
-- **Zero-Config Intelligent Fallback:** Automatically switches to multimodal AI translation if Bhashini credentials are not entered.
-
----
-
-### 🧠 5. Multimodal SatVision Intelligence Pool
-- **Dynamic Fallback Chain:**
-  1. `SatVision 3.8 Flash` *(Primary high-throughput engine)*
-  2. `SatVision 3.7 Flash` *(First resilient fallback)*
-  3. `SatVision 3.6 Flash` *(Secondary fallback)*
-  4. `SatVision 3.0 Flash` *(Tertiary baseline)*
-- **Dual API Key Rotation:** Configure Primary (Key 1) and Backup (Key 2) in Settings for zero-downtime rate limit resilience.
-
----
-
-### 🍏 6. 12+ Year Wayback Historical Archive (2014–2026)
-- **Sub-Meter Global Archive:** Access 26 distinct milestones from 2014 to 2026 via Esri World Imagery Wayback.
-- **Precision Split-Screen Curtain:** Hardware-accelerated WebGL viewport shaders with an Apple-style central grabber.
-- **1-Click Dual Viewport Staging:** Instantly capture pixel-perfect baseline (T1) and observation (T2) views for immediate AI analysis.
-
----
-
-### 📐 7. Spatial Grounding & Physical Land-Cover Metrics
-- **Automated Spatial Bounding Boxes:** Dynamic normalized coordinate overlays `[minX, minY, maxX, maxY]` highlighting altered zones.
-- **Physical Ground Area Calculations:** Automatic translation of pixel shifts into real-world units:
-  - Square Kilometers ($km^2$)
-  - Square Feet ($sq\ ft$)
-  - Net Delta Percentages ($\pm\%$)
-
----
-
-## 🏛️ System Architecture
-
-```mermaid
-graph TD
-    User[Client Browser] -->|Drag & Drop / 3D Globe| Ingest[Multimodal Ingestion]
-    
-    Ingest -->|WebAssembly / WebGL| ONNX[In-Browser ONNX Engine]
-    ONNX -->|Tensors| Spectral[Optical NDVI/NDWI & SAR Lee Filter]
-    
-    Ingest -->|T1 vs T2 First Turn| HF[Hugging Face EuroSAT Swin API]
-    HF -->|Spectral Ground Truth| Fusion[Evidence Fusion Engine]
-    
-    Ingest -->|Visual Prompting| Vision[SatVision Multimodal Engine 3.8/3.7/3.6/3]
-    Vision -->|Grounding Boxes & Reasoning| Fusion
-    
-    Fusion --> Telemetry[Interactive Recharts & Physical Metrics]
-    Fusion --> Grounding[Dynamic Canvas Bounding Box Overlays]
-    
-    Telemetry -->|22 Scheduled Languages| Bhashini[Bhashini Translation Pipeline]
+```
+earth-query-lens/
+├── public/                     # Static assets, logos, and Cesium workers
+│   ├── logo.svg               # Vyomix orbital logo
+│   └── earth-hero.jpg         # High-resolution satellite orbital imagery
+├── src/
+│   ├── components/            # Reusable UI & GIS components
+│   │   ├── reactbits/         # AeroShards, ScrollExpand, MagicBento
+│   │   ├── ChatShareModal.tsx # Full chat PDF export dialog
+│   │   ├── LanguageSwitcher.tsx # 22-language switcher dropdown
+│   │   ├── MapSelector.tsx    # CesiumJS 3D globe & bi-temporal slider
+│   │   └── BackendSettings.tsx # Dual API key configuration
+│   ├── lib/
+│   │   ├── i18n.tsx           # Auto-translating reactive i18n system
+│   │   ├── satquery.ts        # GSD calculus & spectral telemetry types
+│   │   └── onnxInference.ts   # In-browser WebAssembly ONNX inference
+│   ├── routes/
+│   │   ├── HomePage.tsx       # Landing page with floating pill nav & bento
+│   │   └── index.tsx          # Main conversational geospatial studio
+│   ├── services/
+│   │   ├── pdfReportService.ts # Vector PDF generator with images & highlights
+│   │   ├── translationService.ts # Google GTX & progressive cache
+│   │   ├── geminiService.ts   # Multimodal SatVision reasoning pool
+│   │   └── ttsService.ts      # Indic STT voice dictation & TTS audio
+│   ├── App.tsx                # App entrypoint & routing
+│   └── main.tsx               # Root render tree
+├── LICENSE                    # MIT License with Mandatory Attribution
+├── SECURITY.md                # Security policy & zero-telemetry disclosure
+├── package.json               # Dependencies & scripts
+└── vite.config.ts             # Vite 6 + Cesium + Tailwind v4 config
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🛠️ Installation & Local Setup
 
 ### Prerequisites
-- Node.js 18+ or 20+
-- npm or yarn
+- **Node.js**: v18.0.0 or higher (v20+ recommended)
+- **npm**: v9.0.0 or higher
 
-### Installation
+### 1. Clone the Repository
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/earth-query-lens.git
-cd earth-query-lens
+git clone https://github.com/SmartKidzee/vyomixsih.git
+cd vyomixsih
+```
 
-# Install dependencies
+### 2. Install Dependencies
+```bash
 npm install
+```
 
-# Start local development server
+### 3. Run Development Server
+```bash
 npm run dev
 ```
+Open your browser at `http://localhost:5173` to experience Vyomix.
 
-The application will be live at `http://localhost:5173`.
-
-### Environment Configuration (Optional)
-Create a `.env` file in the root directory:
-```env
-# Primary SatVision API Key
-VITE_VISION_API_KEY="your_api_key_here"
-
-# Optional: Hugging Face Serverless Token for EuroSAT Change Detection
-VITE_HF_TOKEN="hf_your_token_here"
-
-# Optional: Bhashini Government Translation Credentials
-VITE_BHASHINI_USER_ID="your_bhashini_user_id"
-VITE_BHASHINI_API_KEY="your_bhashini_api_key"
+### 4. Build for Production
+```bash
+npm run build
+npm run preview
 ```
 
-All credentials can also be configured directly in the application UI under **Settings**.
+---
+
+## 🔒 Security & Privacy
+
+Vyomix adheres to strict zero-retention principles:
+- **Local-First Processing:** Neural inference occurs inside the user's browser via WebAssembly.
+- **Zero Remote Storage:** Uploaded satellite rasters are stored solely in volatile browser RAM and local client IndexedDB.
+- **Cryptographic Document Auditing:** All generated PDF reports contain tamper-evident SHA-256 seals.
+
+For complete vulnerability reporting guidelines and defense deployment security recommendations, consult [SECURITY.md](SECURITY.md).
 
 ---
 
-## 🛠️ Tech Stack
+## 📜 License & Mandatory Attribution
 
-| Layer | Technologies |
-| :--- | :--- |
-| **Framework & Core** | React 19, TypeScript 5.8, Vite 6, TanStack Router |
-| **In-Browser ML** | `onnxruntime-web` (WebAssembly SIMD, WebGL execution provider) |
-| **Change Detection** | Hugging Face Serverless Inference (EuroSAT Swin-Transformer) |
-| **Multimodal Vision** | SatVision Multimodal Engine (`v3.8-flash`, `v3.7-flash`, `v3.6-flash`, `v3-flash`) |
-| **National Languages** | Bhashini ULCA Government Translation API (22 Indian languages) |
-| **3D Geospatial** | CesiumJS 1.145, Resium, Esri World Imagery Wayback WMTS |
-| **Raster Processing** | `geotiff.js`, `html2canvas`, HTML5 Canvas API |
-| **UI & Visuals** | Tailwind CSS v4, Radix UI, Lucide Icons, Recharts |
+This project is licensed under the **MIT License with Mandatory Attribution Clause**.
 
----
+**Author & Owner:** **Shreyas J**  
+**GitHub:** [@SmartKidzee](https://github.com/SmartKidzee)  
+**Team:** The Vyomix Team · **Smart India Hackathon (SIH 2026)**  
 
-## 📄 License
-MIT License. Open for educational, humanitarian, and environmental research.
+### Attribution Requirement
+Any public fork, commercial offering, deployed instance, or derivative work based upon this repository **MUST** prominently attribute the original creator:
+> *"Original project developed by Shreyas J (github.com/SmartKidzee) and the Vyomix Team for Smart India Hackathon (SIH 2026)"*
+
+See the full [LICENSE](LICENSE) file for legal details.

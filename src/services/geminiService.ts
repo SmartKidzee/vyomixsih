@@ -1,6 +1,7 @@
 import { AnalysisResponse, SatQueryError, EvidenceItem, BoundingBox } from '../lib/satquery';
 import * as GeoTIFF from 'geotiff';
 import { translateWithBhashini, isBhashiniConfigured, isBhashiniLanguage } from './bhashiniService';
+import { translateViaGoogleGTX } from './translationService';
 import { runInBrowserOnnxAnalysis } from './onnxService';
 
 /**
@@ -630,19 +631,22 @@ export async function analyzeWithGemini(
     throw new SatQueryError("No API Key found. Please add API Key 1 or API Key 2 in Settings.", 0);
   }
 
-  const parts: any[] = [];
-  parts.push({
-    text: `You are an advanced Satellite Imagery Analysis Model named "Sentinel-SAR-Analyzer". 
-Your task is to analyze the provided images and respond to the query: "${query}". 
+  if (files.length === 0) {
+    return answerGeneralEarthQuery(query, signal);
+  }
 
-If multiple images are provided, it is a bi-temporal (change detection) or multi-modal task.
+  const parts: any[] = [];
+  if (files.length >= 2) {
+    parts.push({
+      text: `You are an advanced Satellite Imagery Analysis Model named "Sentinel-SAR-Analyzer". 
+Your task is to analyze the provided bi-temporal satellite image pair (T1 Baseline and T2 Observation) and respond to the query: "${query}". 
 
 Respond STRICTLY in JSON format matching this interface:
 {
   "answer": "A detailed explanation of your findings, answering the user query with geospatial insight.",
   "confidence": 95,
   "model": "Sentinel-SAR-Analyzer",
-  "task": "Scene VQA, Grounding, or Change Detection",
+  "task": "Bi-Temporal Change Detection",
   "evidence": [{"type": "visual", "label": "Observation", "detail": "What you see"}],
   "grounding": [
     {"bbox": [minX, minY, maxX, maxY], "label": "Feature or Change Name", "confidence": 90}
@@ -661,11 +665,36 @@ Respond STRICTLY in JSON format matching this interface:
   "metadata": [{"filename": "...", "modality": "optical"}]
 }
 CRITICAL REQUIREMENTS FOR VISUAL HIGHLIGHTING & GROUNDING:
-- You MUST provide between 2 and 6 bounding boxes in "grounding" identifying the most prominent land features, changed areas, or regions of interest.
+- You MUST provide between 2 and 6 bounding boxes in "grounding" identifying the most prominent changed areas or regions of interest.
 - Coordinates for "bbox" MUST be [minX, minY, maxX, maxY] normalized floats between 0.0 and 1.0 (where minX=left, minY=top, maxX=right, maxY=bottom).
 - Label each box with the feature or change detected (e.g. "Changed Shoreline Zone", "Urban Construction Area", "Vegetation Loss", "Water Reservoir").
 Only output the JSON object without any markdown wrappers.`
-  });
+    });
+  } else {
+    parts.push({
+      text: `You are an advanced Satellite Imagery Analysis Model named "Sentinel-SAR-Analyzer". 
+Your task is to inspect the single provided satellite image and respond to the query: "${query}". 
+
+Respond STRICTLY in JSON format matching this interface:
+{
+  "answer": "A detailed explanation of your findings in this satellite observation, answering the user query with geospatial insight.",
+  "confidence": 95,
+  "model": "Sentinel-SAR-Analyzer",
+  "task": "Single-Scene Earth Observation",
+  "evidence": [{"type": "visual", "label": "Observation", "detail": "What you see"}],
+  "grounding": [
+    {"bbox": [minX, minY, maxX, maxY], "label": "Feature Name", "confidence": 90}
+  ],
+  "metadata": [{"filename": "...", "modality": "optical"}]
+}
+CRITICAL REQUIREMENTS:
+- This is a single satellite image observation. DO NOT output a "change" object, and DO NOT compare pre/post events.
+- You MUST provide between 2 and 6 bounding boxes in "grounding" identifying prominent land features, terrain types, vegetation zones, urban structures, or areas of interest in the image.
+- Coordinates for "bbox" MUST be [minX, minY, maxX, maxY] normalized floats between 0.0 and 1.0 (where minX=left, minY=top, maxX=right, maxY=bottom).
+- Label each box with the feature name.
+Only output the JSON object without any markdown wrappers.`
+    });
+  }
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
@@ -803,8 +832,10 @@ Only output the JSON object without any markdown wrappers.`
     }));
   }
 
-  // Ensure deterministic, stable land_cover metrics for bi-temporal / change results
-  if (files.length >= 2 && !parsedResponse.change) {
+  // Ensure change object ONLY exists if 2 or more temporal frames were provided
+  if (files.length < 2) {
+    delete parsedResponse.change;
+  } else if (!parsedResponse.change) {
     parsedResponse.change = {
       change_detected: true,
       description: "Temporal change observed between comparative frames.",
@@ -1022,7 +1053,17 @@ const LANG_NAMES: Record<string, string> = {
 export async function translateText(text: string, targetLang: string): Promise<string> {
   if (!text || targetLang === "en") return text;
 
-  // ── Strategy 1: Prefer Bhashini for Indian languages (GIGW compliant) ──
+  // ── Strategy 1: Google Translate GTX Engine (Instant, 100% Free, Zero Key, All 22 Indian Languages) ──
+  try {
+    const translated = await translateViaGoogleGTX(text, targetLang, "auto");
+    if (translated && translated.trim() && translated !== text) {
+      return translated;
+    }
+  } catch (err) {
+    console.warn("[Translation] Google GTX failed, falling back:", err);
+  }
+
+  // ── Strategy 2: Bhashini for Indian languages (if configured) ──
   if (isBhashiniLanguage(targetLang) && isBhashiniConfigured()) {
     try {
       const translated = await translateWithBhashini(text, "en", targetLang);
@@ -1031,11 +1072,10 @@ export async function translateText(text: string, targetLang: string): Promise<s
       }
     } catch (err) {
       console.warn("[Bhashini] Translation failed, falling back to primary translation engine:", err);
-      // Fall through to primary translation engine
     }
   }
 
-  // ── Strategy 2: Multimodal-based translation (fallback) ──
+  // ── Strategy 3: Multimodal-based translation (fallback via Gemini) ──
   const keys = getApiKeys();
   if (keys.length === 0) return text;
 
@@ -1065,6 +1105,166 @@ export async function translateText(text: string, targetLang: string): Promise<s
   return text; // Fallback to original
 }
 
+export async function answerGeneralEarthQuery(
+  query: string,
+  signal?: AbortSignal
+): Promise<AnalysisResponse> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return {
+      answer: "Welcome to Earth Query Lens! Please configure an API Key in Settings to explore satellite data, or ask questions about remote sensing, SAR, NDVI, and Earth observation.",
+      confidence: 100,
+      model: "SatVision Assistant",
+      task: "Geospatial Knowledge & Remote Sensing",
+    };
+  }
+
+  const promptText = `You are Earth Query Lens AI, an expert Earth Observation, Satellite Remote Sensing, and Geospatial Intelligence Assistant.
+Provide a clear, technically sound, and structured response in Markdown to the following user query.
+
+Query: "${query}"
+
+RULES:
+1. No satellite images are attached to this prompt. DO NOT fabricate observations or claim you see an image.
+2. If the user asks a remote sensing or geospatial science question (e.g. NDVI, SAR polarimetry, multispectral band ratios, spatial resolution, optical vs radar sensors, Sentinel-1/2, Landsat, etc.), provide an expert, educational, and accurate explanation with formatting, bullet points, or formulas.
+3. If the user asks a simple greeting or general question (e.g. "hi", "who are you", "what can you do"), greet them warmly and concisely introduce Earth Query Lens capabilities (single image feature extraction, multi-temporal change detection, land-cover quantification, and map area inspection).
+4. DO NOT generate fictional change metrics, pre/post event data, or bounding boxes.`;
+
+  const allApiKeys = getApiKeys();
+  const keysToAttempt = allApiKeys.length > 0 ? allApiKeys : [apiKey];
+
+  for (const currentKey of keysToAttempt) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: { temperature: 0.3 }
+          }),
+          signal: signal ?? null
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const cleanModel = model.replace(/^gemini-/, "SatVision ");
+            return {
+              answer: text.trim(),
+              confidence: 98,
+              model: cleanModel,
+              task: "Geospatial Knowledge & Remote Sensing",
+              execution_trace: {
+                query,
+                detected_task: "Geospatial Knowledge Query",
+                model: cleanModel,
+                steps: [
+                  { name: "Query Classification", status: "done", detail: "General remote sensing / geospatial query identified without imagery." },
+                  { name: "Domain Knowledge Synthesis", status: "done", detail: "Synthesized technical explanation." }
+                ]
+              }
+            };
+          }
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') throw err;
+      }
+    }
+  }
+
+  return {
+    answer: "I am Earth Query Lens AI. You can ask me any satellite remote sensing questions or upload imagery (via the upload button or the interactive Map tab) to perform optical/SAR classification and bi-temporal change detection.",
+    confidence: 90,
+    model: "SatVision Assistant",
+    task: "Geospatial Knowledge"
+  };
+}
+
+export async function answerFollowUpQuery(
+  query: string,
+  files: File[],
+  signal?: AbortSignal
+): Promise<AnalysisResponse> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new SatQueryError("No API Key found. Please add an API Key in Settings.", 0);
+  }
+
+  const parts: any[] = [];
+  parts.push({
+    text: `You are Earth Query Lens AI, an expert Earth Observation and Satellite Remote Sensing assistant.
+The user previously conducted satellite imagery analysis on the attached image(s) in this session.
+Now the user asks this follow-up question:
+"${query}"
+
+CRITICAL INSTRUCTIONS FOR FOLLOW-UP:
+- Provide a direct, comprehensive, and helpful answer in Markdown addressing the user's follow-up question.
+- Use the visual context from the attached satellite imagery to ground your answer where applicable.
+- DO NOT generate or repeat change detection tables, pre/post land cover comparisons, or bounding box coordinates.
+- DO NOT output JSON. Respond purely in well-structured Markdown with clear formatting, bold terms, bullet points, or LaTeX formulas where applicable.`
+  });
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!file) continue;
+    const processed = await processImageForGemini(file);
+    if (files.length === 2) {
+      parts.push({ text: `=== SATELLITE IMAGE ${i + 1}: ${i === 0 ? 'T1 BASELINE' : 'T2 OBSERVATION'} (${file.name}) ===` });
+    }
+    parts.push({
+      inlineData: { mimeType: processed.mimeType, data: processed.data }
+    });
+  }
+
+  const allApiKeys = getApiKeys();
+  const keysToAttempt = allApiKeys.length > 0 ? allApiKeys : [apiKey];
+
+  for (const currentKey of keysToAttempt) {
+    for (const model of GEMINI_MODELS) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: parts }],
+            generationConfig: { temperature: 0.2 }
+          }),
+          signal: signal ?? null
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const cleanModel = model.replace(/^gemini-/, "SatVision ");
+            return {
+              answer: text.trim(),
+              model: cleanModel,
+              task: "Conversational Follow-Up",
+              evidence: [],
+              execution_trace: {
+                query,
+                detected_task: "Satellite Analysis Follow-Up",
+                model: cleanModel,
+                steps: [
+                  { name: "Context Image Retrieval", status: "done", detail: "Retained active satellite imagery context." },
+                  { name: "Conversational Vision Reasoning", status: "done", detail: "Synthesized direct answer to follow-up query without re-running change detection." }
+                ]
+              }
+            };
+          }
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') throw err;
+      }
+    }
+  }
+
+  throw new SatQueryError("Unable to process follow-up query. Please try again.", 500);
+}
+
 export interface OrchestrationOptions {
   isFollowUp?: boolean;
 }
@@ -1079,8 +1279,85 @@ export async function runOrchestration(
   const hasVisionKey = !!getApiKey();
   const hasHfToken = !!getHuggingFaceToken();
 
-  // ── Single image / Optical & SAR ────────────────────────────────
-  if (files.length < 2) {
+  // ── Follow-Up in existing conversation: Fast conversational response without repeating analysis or charts ──
+  if (options?.isFollowUp) {
+    if (files.length === 0) {
+      onProgress("Synthesizing remote sensing knowledge...");
+      return answerGeneralEarthQuery(query, signal);
+    }
+    onProgress("Processing follow-up query with conversational vision engine...");
+    return answerFollowUpQuery(query, files, signal);
+  }
+
+  const isBiTempQuery = /\b(bi[-\s]?temp(oral)?|change\s+detection|compare\s+(images?|scenes?|both|two)|before\s+and\s+after|pre\s+and\s+post|temporal\s+change|diff\b)/i.test(query);
+  const isImageSpecificQuery = /\b(analy[sz]e|detect|classify|segment|calculate\s+area|what\s+is\s+in\s+this|look\s+at\s+this|highlight|identify\s+features?|bounding\s+box|find\s+(buildings?|water|ships?|forest|roads?)|detect\s+(buildings?|water|ships?|forest|roads?))\b/i.test(query);
+
+  // ── Scenario 1: NO images attached (files.length === 0) ──────────────────
+  if (files.length === 0) {
+    if (isBiTempQuery) {
+      onProgress("Checking bi-temporal requirements...");
+      return {
+        answer: "⚠️ **Satellite Imagery Required for Bi-Temporal Analysis**\n\nBi-temporal change detection requires **two** satellite images (a **T1 Baseline** and a **T2 Observation**) of the same region taken at different times to compute land-cover shifts and detect visual changes.\n\n**How to proceed:**\n1. **Upload Images**: Click the **Paperclip icon** (or drag & drop) to attach 2 satellite images (optical or SAR).\n2. **Capture via Map**: Switch to the **Map** tab at the top to select an Area of Interest and capture satellite scenes directly into your session.",
+        confidence: 100,
+        model: "SatVision Pipeline",
+        task: "Bi-Temporal Analysis (Awaiting Imagery)",
+        execution_trace: {
+          query,
+          detected_task: "Bi-temporal Change Detection",
+          model: "SatVision Pipeline",
+          steps: [
+            { name: "Query Parsing", status: "done", detail: "Bi-temporal change detection requested." },
+            { name: "Input Validation", status: "done", detail: "No imagery provided; prompted user for 2 temporal satellite images." }
+          ]
+        }
+      };
+    }
+
+    if (isImageSpecificQuery) {
+      onProgress("Checking attached imagery...");
+      return {
+        answer: "⚠️ **Satellite Image Required**\n\nTo analyze satellite imagery, classify land cover, or detect ground features, please provide a satellite image:\n\n- Click the **Paperclip icon** to upload an optical or SAR satellite image.\n- Or open the **Map** tab at the top to capture any global location directly.",
+        confidence: 100,
+        model: "SatVision Pipeline",
+        task: "Satellite Image Analysis (Awaiting Imagery)",
+        execution_trace: {
+          query,
+          detected_task: "Single-Scene Analysis",
+          model: "SatVision Pipeline",
+          steps: [
+            { name: "Query Parsing", status: "done", detail: "Image inspection requested." },
+            { name: "Input Validation", status: "done", detail: "No imagery provided; prompted user to upload or capture from Map." }
+          ]
+        }
+      };
+    }
+
+    // General question or remote sensing concept without imagery
+    onProgress("Synthesizing remote sensing knowledge...");
+    return answerGeneralEarthQuery(query, signal);
+  }
+
+  // ── Scenario 2: 1 image attached (files.length === 1) ────────────────────
+  if (files.length === 1) {
+    if (isBiTempQuery) {
+      onProgress("Checking temporal image requirements...");
+      return {
+        answer: "⚠️ **Second Image Required for Bi-Temporal Change Detection**\n\nYou have uploaded 1 satellite image. Bi-temporal change detection requires **two** observations (a **T1 Baseline** and a **T2 Observation**) of the same region to calculate comparative land cover transitions and quantified area deltas.\n\n**Please upload a second image** (or capture a second timestamp via the Map) to proceed with change quantification.",
+        confidence: 100,
+        model: "SatVision Pipeline",
+        task: "Bi-Temporal Analysis (Awaiting Second Image)",
+        execution_trace: {
+          query,
+          detected_task: "Bi-temporal Change Detection",
+          model: "SatVision Pipeline",
+          steps: [
+            { name: "Query Parsing", status: "done", detail: "Bi-temporal change detection requested." },
+            { name: "Image Count Check", status: "done", detail: "1 image found; 2 images required for comparative analysis." }
+          ]
+        }
+      };
+    }
+
     // Launch In-Browser ONNX analysis concurrently (zero-latency, WebAssembly/WebGL)
     const onnxPromise = runInBrowserOnnxAnalysis(files, query).catch((e) => {
       console.warn("[In-Browser ONNX] Notice:", e);
@@ -1119,34 +1396,7 @@ export async function runOrchestration(
     );
   }
 
-  // ── Bi-temporal (2 images) ──────────────────────────────────────
-
-  // 1. Check if this is a follow-up query in an existing conversation:
-  // If so, continue directly with SatVision conversational models and DO NOT re-trigger HF!
-  if (options?.isFollowUp) {
-    onProgress("Processing follow-up query with conversational vision engine...");
-    const visionRes = await analyzeWithGemini(
-      `Context: The user previously uploaded this bi-temporal satellite image pair (T1 baseline and T2 observation). 
-Now the user asks this follow-up question: "${query}". 
-Provide a direct, conversational, and precise answer addressing their query based on the imagery.`,
-      files,
-      signal
-    );
-
-    visionRes.execution_trace = {
-      query: query,
-      detected_task: "Bi-temporal Conversational Follow-up",
-      model: visionRes.model || "SatVision Engine",
-      steps: [
-        { name: "Temporal Imagery Context", status: "done", detail: "Retained bi-temporal imagery context from active conversation." },
-        { name: "SatVision Conversational Reasoning", status: "done", detail: "Synthesized direct answer to user follow-up query without re-running change detection." },
-      ],
-    };
-
-    return visionRes;
-  }
-
-  // 2. Initial Bi-temporal Query: Fuse SatVision Reasoning, In-Browser ONNX ML, & HF EuroSAT
+  // ── Bi-temporal (2 images) Initial Query: Fuse SatVision Reasoning, In-Browser ONNX ML, & HF EuroSAT ──
   if (!hasVisionKey && !hasHfToken) {
     throw new SatQueryError(
       "No API keys found. Please add an API Key or Hugging Face Token in Settings to analyze imagery.",

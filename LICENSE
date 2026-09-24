@@ -1,0 +1,42 @@
+MIT License with Mandatory Attribution Clause
+
+Copyright (c) 2026 Shreyas J (GitHub: https://github.com/SmartKidzee) and the Vyomix Team
+Project: Vyomix · Earth Query Lens (Smart India Hackathon 2026)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+1. COPYRIGHT & ATTRIBUTION NOTICE:
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+2. MANDATORY AUTHOR & TEAM ATTRIBUTION:
+   Any public deployment, fork, commercial offering, distribution, or derivative
+   work based in whole or in part upon this Software MUST provide prominent,
+   unambiguous attribution to the original author and team:
+   - Primary Author & Owner: Shreyas J (GitHub: https://github.com/SmartKidzee)
+   - Team & Initiative: The Vyomix Team · Smart India Hackathon (SIH 2026)
+   - Canonical Repository: https://github.com/SmartKidzee/vyomixsih
+
+   This attribution must appear:
+   a) In the primary README.md or technical documentation of any derivative work.
+   b) In the user-visible graphical interface (e.g., footer, about dialog, or header).
+   c) Preserved intact in all original source code comment headers.
+
+3. TRADEMARK & ENDORSEMENT LIMITATION:
+   Neither the name of the copyright holder ("Shreyas J"), nor the GitHub handle
+   ("SmartKidzee"), nor the team/organization name ("Vyomix") may be used to endorse
+   or promote products derived from this software without specific prior written permission,
+   except to fulfill the mandatory attribution requirements stated in Section 2.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
