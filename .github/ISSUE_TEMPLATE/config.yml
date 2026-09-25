@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability Reporting
+    url: https://github.com/SmartKidzee/vyomixsih/security/advisories/new
+    about: Please report security vulnerabilities confidentially through GitHub Security Advisories rather than public issues.
+  - name: GitHub Discussions / Community Q&A
+    url: https://github.com/SmartKidzee/vyomixsih/discussions
+    about: Ask questions, share satellite analysis workflows, or brainstorm new algorithms with the community.

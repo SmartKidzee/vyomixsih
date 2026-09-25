@@ -18,9 +18,18 @@ import { useI18n } from "@/lib/i18n";
 import AeroShards from "@/components/reactbits/AeroShards";
 import ScrollExpand from "@/components/reactbits/ScrollExpand";
 import MagicBento, { type BentoCardItem } from "@/components/reactbits/MagicBento";
+import TrueFocus from "@/components/reactbits/TrueFocus";
 
 export default function HomePage() {
   const { t } = useI18n();
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Dynamic Bento Cards routed through i18n translation service
   const bentoCards: BentoCardItem[] = [
@@ -72,44 +81,45 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#060b18] text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950 overflow-visible">
       
       {/* ──────────────── FLOATING PILL NAVBAR WITH VYOMIX BRANDING ──────────────── */}
-      <header className="fixed top-4 sm:top-5 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-5xl rounded-full bg-[#060b18]/80 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] px-4 sm:px-6 py-2.5 sm:py-3 transition-all">
-        <div className="flex items-center justify-between gap-3 sm:gap-6">
+      <header className="fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 z-50 w-[94%] sm:w-[92%] max-w-5xl rounded-full bg-[#060b18]/85 backdrop-blur-2xl border border-white/15 shadow-[0_12px_40px_rgba(0,0,0,0.6)] px-3 sm:px-6 py-2 sm:py-3 transition-all">
+        <div className="flex items-center justify-between gap-2 sm:gap-6">
           
           {/* Brand Logo with VYOMIX */}
-          <Link to="/" className="flex items-center gap-3 group focus:outline-none min-w-0">
-            <div className="relative flex size-10 items-center justify-center rounded-full bg-white/10 border border-cyan-400/30 shadow-lg shadow-cyan-500/20 group-hover:border-cyan-400/60 transition-all p-2 backdrop-blur-md shrink-0">
+          <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group focus:outline-none min-w-0">
+            <div className="relative flex size-9 sm:size-10 items-center justify-center rounded-full bg-white/10 border border-cyan-400/30 shadow-lg shadow-cyan-500/20 group-hover:border-cyan-400/60 transition-all p-1.5 sm:p-2 backdrop-blur-md shrink-0">
               <img src="/logo.svg" alt="VYOMIX" className="size-full object-contain" />
             </div>
             <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-base sm:text-lg font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-white uppercase font-sans">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-sm sm:text-lg font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-sky-200 to-white uppercase font-sans">
                   {t("nav.vyomix", "VYOMIX")}
                 </span>
                 <span className="hidden sm:inline-block text-slate-500 font-light">|</span>
                 <span className="hidden sm:inline-block text-xs font-semibold text-slate-200 tracking-tight truncate">
                   {t("app.title", "Earth Query Lens")}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[8.5px] sm:text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
                   {t("nav.sih", "SIH 2026")}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium tracking-wide truncate">
+              <span className="hidden xs:inline-block text-[9.5px] sm:text-[10px] text-slate-400 font-medium tracking-wide truncate">
                 {t("nav.tagline", "Multimodal Satellite Intelligence")}
               </span>
             </div>
           </Link>
 
           {/* Right Header Navigation: Language Switcher + Glassmorphic Launch Studio */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* Live Language Switcher supporting 22 Indian languages */}
             <LanguageSwitcher />
 
             {/* Glassmorphic Launch Studio CTA Button */}
             <Link
               to="/app"
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 py-2 sm:px-5 sm:py-2 rounded-full bg-cyan-400/15 hover:bg-cyan-400/25 border border-cyan-400/40 hover:border-cyan-300 text-cyan-200 hover:text-white font-bold text-xs sm:text-sm tracking-tight transition-all duration-200 backdrop-blur-xl shadow-[0_4px_20px_rgba(56,189,248,0.2)] hover:shadow-[0_6px_25px_rgba(56,189,248,0.4)] active:scale-95"
+              className="inline-flex items-center gap-1 sm:gap-2 px-2.5 py-1.5 sm:px-5 sm:py-2 rounded-full bg-cyan-400/15 hover:bg-cyan-400/25 border border-cyan-400/40 hover:border-cyan-300 text-cyan-200 hover:text-white font-bold text-xs sm:text-sm tracking-tight transition-all duration-200 backdrop-blur-xl shadow-[0_4px_20px_rgba(56,189,248,0.2)] active:scale-95"
             >
-              <span>{t("nav.launchStudio", "Launch Studio")}</span>
+              <span className="hidden xs:inline">{t("nav.launchStudio", "Launch Studio")}</span>
+              <span className="xs:hidden">Studio</span>
               <ArrowUpRight className="size-3.5 sm:size-4 stroke-[2.5]" />
             </Link>
           </div>
@@ -117,10 +127,10 @@ export default function HomePage() {
       </header>
 
       {/* ──────────────── HERO SECTION (AEROSHARDS FULL-BLEED) ──────────────── */}
-      <section className="relative min-h-[92vh] sm:min-h-screen flex items-center justify-center pt-28 pb-16 px-4 sm:px-6 lg:px-8 overflow-hidden bg-[#060b18]">
+      <section className="relative min-h-[90vh] sm:min-h-screen flex items-center justify-center pt-24 sm:pt-28 pb-14 sm:pb-16 px-4 sm:px-6 lg:px-8 overflow-hidden bg-[#060b18]">
         
-        {/* Full-bleed ReactBits AeroShards component */}
-        <div className="absolute inset-0 z-0 pointer-events-auto">
+        {/* Full-bleed ReactBits AeroShards component — touch scrolling permitted on phones */}
+        <div className="absolute inset-0 z-0 pointer-events-none sm:pointer-events-auto">
           <AeroShards
             backgroundColor="#060b18"
             shardColor="#38bdf8"
@@ -130,14 +140,14 @@ export default function HomePage() {
             material="chrome"
             detail="balanced"
             effect="none"
-            scale={1.05}
-            spread={0.9}
+            scale={isMobile ? 1.2 : 1.05}
+            spread={isMobile ? 1.0 : 0.9}
             depth={1.1}
             speed={0.8}
             spin={0.7}
             interaction="repel"
-            density={1.3}
-            shardSize={1.1}
+            density={isMobile ? 1.4 : 1.3}
+            shardSize={isMobile ? 1.25 : 1.1}
             stretch={1.1}
             turbulence={0.9}
             glow={1.2}
@@ -165,15 +175,24 @@ export default function HomePage() {
         <div className="relative z-10 max-w-5xl mx-auto text-center flex flex-col items-center">
           
           {/* Clean Modern Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-cyan-300 text-xs font-mono font-medium mb-6 shadow-xl backdrop-blur-md">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-white/5 border border-white/10 text-cyan-300 text-[11px] sm:text-xs font-mono font-medium mb-5 sm:mb-6 shadow-xl backdrop-blur-md">
             <span>{t("home.hero.badge1", "SMART INDIA HACKATHON 2026")}</span>
             <span className="text-slate-600">•</span>
             <span className="text-slate-300">{t("home.hero.badge2", "MULTIMODAL SATELLITE VISION")}</span>
           </div>
 
           {/* Massive Bold Modern Headline */}
-          <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-white uppercase leading-[1.04] drop-shadow-2xl">
-            {t("home.hero.title1", "SEE THROUGH CLOUDS.")}
+          <h1 className="text-3xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-white uppercase leading-[1.08] drop-shadow-2xl break-words">
+            <TrueFocus
+              sentence={t("home.hero.title1", "SEE THROUGH CLOUDS")}
+              manualMode={false}
+              blurAmount={5}
+              borderColor="#38bdf8"
+              glowColor="rgba(56, 189, 248, 0.65)"
+              animationDuration={0.6}
+              pauseBetweenAnimations={1.2}
+              className="text-white"
+            />
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-400 via-cyan-300 to-indigo-300">
               {t("home.hero.title2", "COMMAND ORBITAL")}
@@ -183,15 +202,15 @@ export default function HomePage() {
           </h1>
 
           {/* High-Contrast Crisp Subtext */}
-          <p className="mt-6 text-base sm:text-xl lg:text-2xl text-slate-200 font-medium max-w-3xl leading-relaxed drop-shadow-md">
+          <p className="mt-4 sm:mt-6 text-sm sm:text-xl lg:text-2xl text-slate-200 font-medium max-w-3xl leading-relaxed drop-shadow-md">
             {t("home.hero.desc", "Next-generation Earth observation intelligence fusing Optical & Synthetic Aperture Radar (SAR). Query complex satellite scenes in 22+ languages with native Indic voice grounding.")}
           </p>
 
           {/* Singular Primary Call-to-Action — Glassmorphic */}
-          <div className="mt-9 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+          <div className="mt-7 sm:mt-9 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
             <Link
               to="/app"
-              className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 sm:px-10 sm:py-4.5 rounded-2xl bg-gradient-to-r from-cyan-400/90 via-sky-400/90 to-blue-500/90 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black text-base sm:text-lg tracking-tight backdrop-blur-xl border border-white/40 shadow-[0_12px_40px_rgba(56,189,248,0.35)] hover:shadow-[0_16px_50px_rgba(56,189,248,0.55)] transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
+              className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-7 py-3.5 sm:px-10 sm:py-4.5 rounded-2xl bg-gradient-to-r from-cyan-400/90 via-sky-400/90 to-blue-500/90 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black text-base sm:text-lg tracking-tight backdrop-blur-xl border border-white/40 shadow-[0_12px_40px_rgba(56,189,248,0.35)] hover:shadow-[0_16px_50px_rgba(56,189,248,0.55)] transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
             >
               <span>{t("home.hero.cta", "Launch Earth Query Lens")}</span>
               <ArrowRight className="size-5 transition-transform group-hover:translate-x-1.5" />
@@ -199,55 +218,55 @@ export default function HomePage() {
           </div>
 
           {/* Modern Technical Telemetry Bar */}
-          <div className="mt-14 w-full max-w-4xl grid grid-cols-2 md:grid-cols-4 gap-3 text-left">
-            <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-cyan-500/40 transition-all shadow-lg">
-              <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-cyan-400 uppercase tracking-wider mb-1">
-                <Radio className="size-3.5" />
+          <div className="mt-10 sm:mt-14 w-full max-w-4xl grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 text-left">
+            <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-cyan-500/40 transition-all shadow-lg">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono font-bold text-cyan-400 uppercase tracking-wider mb-1">
+                <Radio className="size-3 sm:size-3.5" />
                 <span>{t("home.hero.telemetry.radar.title", "RADAR SENSORS")}</span>
               </div>
-              <div className="text-sm sm:text-base font-bold text-white">
+              <div className="text-xs sm:text-base font-bold text-white">
                 {t("home.hero.telemetry.radar.val", "C/L/X-Band SAR")}
               </div>
-              <div className="text-[11px] text-slate-400 font-medium">
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
                 {t("home.hero.telemetry.radar.desc", "Cloud-invariant phase")}
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-sky-500/40 transition-all shadow-lg">
-              <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-sky-400 uppercase tracking-wider mb-1">
-                <MapPin className="size-3.5" />
+            <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-sky-500/40 transition-all shadow-lg">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono font-bold text-sky-400 uppercase tracking-wider mb-1">
+                <MapPin className="size-3 sm:size-3.5" />
                 <span>{t("home.hero.telemetry.res.title", "GROUND RESOLUTION")}</span>
               </div>
-              <div className="text-sm sm:text-base font-bold text-white">
+              <div className="text-xs sm:text-base font-bold text-white">
                 {t("home.hero.telemetry.res.val", "Sub-Meter Precision")}
               </div>
-              <div className="text-[11px] text-slate-400 font-medium">
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
                 {t("home.hero.telemetry.res.desc", "Coordinate bounding boxes")}
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-indigo-500/40 transition-all shadow-lg">
-              <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-indigo-400 uppercase tracking-wider mb-1">
-                <BarChart3 className="size-3.5" />
+            <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-indigo-500/40 transition-all shadow-lg">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono font-bold text-indigo-400 uppercase tracking-wider mb-1">
+                <BarChart3 className="size-3 sm:size-3.5" />
                 <span>{t("home.hero.telemetry.calc.title", "PHYSICAL METRICS")}</span>
               </div>
-              <div className="text-sm sm:text-base font-bold text-white">
+              <div className="text-xs sm:text-base font-bold text-white">
                 {t("home.hero.telemetry.calc.val", "Exact Area (km²/m²)")}
               </div>
-              <div className="text-[11px] text-slate-400 font-medium">
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
                 {t("home.hero.telemetry.calc.desc", "Deterministic calculus")}
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-emerald-500/40 transition-all shadow-lg">
-              <div className="flex items-center gap-2 text-[11px] font-mono font-bold text-emerald-400 uppercase tracking-wider mb-1">
-                <Languages className="size-3.5" />
+            <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/[0.04] backdrop-blur-xl border border-white/10 hover:border-emerald-500/40 transition-all shadow-lg">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-mono font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                <Languages className="size-3 sm:size-3.5" />
                 <span>{t("home.hero.telemetry.voice.title", "INDIC VERNACULAR")}</span>
               </div>
-              <div className="text-sm sm:text-base font-bold text-white">
+              <div className="text-xs sm:text-base font-bold text-white">
                 {t("home.hero.telemetry.voice.val", "10+ Languages")}
               </div>
-              <div className="text-[11px] text-slate-400 font-medium">
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
                 {t("home.hero.telemetry.voice.desc", "Native STT + TTS Voice")}
               </div>
             </div>
@@ -264,12 +283,12 @@ export default function HomePage() {
           title={t("home.scroll.title", "ORBITAL GROUND OBSERVATION")}
           scrollHint={t("home.scroll.hint", "SCROLL TO UNFOLD ORBITAL VIEW ↓")}
           useWindowScroll={true}
-          startWidth={48}
-          startHeight={58}
-          startRadius={24}
+          startWidth={isMobile ? 86 : 48}
+          startHeight={isMobile ? 48 : 58}
+          startRadius={isMobile ? 16 : 24}
           endRadius={0}
           mediaZoom={1.35}
-          scrollDistance={1.6}
+          scrollDistance={isMobile ? 1.2 : 1.6}
           holdDistance={0.5}
           overlayScrim={0.7}
         >

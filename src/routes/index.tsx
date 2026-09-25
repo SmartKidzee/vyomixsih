@@ -5,7 +5,7 @@ import {
   ChevronRight, Check, Layers, FileImage, Bot, User, Sparkles, BarChart3,
   Menu, Map as MapIcon, MessageSquare, Eye, Rocket, ZoomIn, TrendingUp,
   Compass, Scale, Radio, Sun, ExternalLink, DownloadCloud, Info, Globe,
-  Mic, MicOff, Volume2, VolumeX, Home, Share2
+  Mic, MicOff, Volume2, VolumeX, Home, Share2, Copy
 } from "lucide-react";
 import { ChatShareModal } from "@/components/ChatShareModal";
 import { BackendSettings } from "@/components/BackendSettings";
@@ -1168,6 +1168,13 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
     return () => { cancelled = true; };
   }, [expandedChip, lang, r.evidence]);
 
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(displayAnswer);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const isBiTemporal = Boolean(msg.images && msg.images.length > 1);
   const shouldShowConfidence = Boolean(
     conf && ratio !== null && (
@@ -1177,111 +1184,111 @@ function AssistantBubble({ msg, onImageClick }: { msg: ChatMessage, onImageClick
   );
 
   return (
-    <div className="flex gap-4 items-start mb-8">
-      <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-cyan-500 text-white mt-1 shadow-lg shadow-cyan-500/20">
-        <Satellite className="size-4" />
+    <div className="flex gap-3.5 sm:gap-4 items-start mb-8 group">
+      {/* Sleek Minimalist Vyomix Avatar — Top Aligned */}
+      <div className="shrink-0 flex size-7 sm:size-8 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 mt-0.5 shadow-sm">
+        <Satellite className="size-4 text-cyan-300" />
       </div>
-      <div className="flex-1 min-w-0 space-y-3">
-        {/* Answer card */}
-        <div className="rounded-2xl bg-[#0c1428]/80 backdrop-blur-sm border border-white/8 shadow-lg shadow-black/20 p-5">
-          <div className="flex items-center gap-2 mb-3 flex-wrap">
-            <Sparkles className="size-4 text-cyan-400 shrink-0" />
-            <span className="text-xs font-bold tracking-widest uppercase text-slate-400">
-              {displayTask}
-            </span>
-            {isTranslating ? (
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-cyan-400 animate-pulse ml-auto bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-full">
-                <Globe className="size-3 animate-spin" />
-                <span>{t("translating") || "Translating..."}</span>
-              </span>
-            ) : lang !== "en" ? (
-              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full ml-auto">
-                <Globe className="size-3" />
-                <span className="uppercase font-bold">{lang}</span>
-              </span>
-            ) : null}
 
-            {/* Free Neural Google/Indic TTS Playback */}
-            <button
-              type="button"
-              onClick={handleToggleSpeak}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
-                isTranslating || lang !== "en" ? "ml-1" : "ml-auto"
-              } ${
-                isSpeaking
-                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300 ring-1 ring-rose-400/40 animate-pulse"
-                  : "bg-white/5 border-white/10 text-slate-300 hover:text-cyan-300 hover:bg-white/10"
-              }`}
-              title={isSpeaking ? (t("voice.stopSpeaking") || "Stop speaking") : (t("voice.speakResponse") || "Read response aloud (TTS)")}
-            >
-              {isSpeaking ? (
-                <>
-                  <VolumeX className="size-3.5 text-rose-400" />
-                  <span className="text-[11px] font-mono text-rose-300">{t("voice.stopSpeaking") || "Stop"}</span>
-                </>
-              ) : (
-                <>
-                  <Volume2 className="size-3.5 text-cyan-400" />
-                  <span className="text-[11px] font-mono text-slate-400 group-hover:text-cyan-300">TTS</span>
-                </>
-              )}
-            </button>
-          </div>
-          <div className="text-slate-200 text-sm sm:text-[15px] leading-relaxed font-sans prose-space max-w-none">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMath]}
-              rehypePlugins={[rehypeKatex]}
-              components={{
-                table: ({ node, ...props }) => (
-                  <div className="my-4 w-full overflow-x-auto rounded-xl border border-white/10 bg-black/40 backdrop-blur-sm shadow-md">
-                    <table className="w-full border-collapse text-left text-xs sm:text-sm text-slate-200" {...props} />
-                  </div>
-                ),
-                thead: ({ node, ...props }) => (
-                  <thead className="bg-cyan-950/40 border-b border-white/15 text-cyan-300 font-semibold tracking-wider text-[11px] sm:text-xs uppercase font-mono" {...props} />
-                ),
-                th: ({ node, ...props }) => (
-                  <th className="px-3.5 py-2.5 font-bold border-r border-white/10 last:border-r-0 whitespace-nowrap" {...props} />
-                ),
-                td: ({ node, ...props }) => (
-                  <td className="px-3.5 py-2 border-t border-white/5 border-r border-white/5 last:border-r-0 leading-normal" {...props} />
-                ),
-                tr: ({ node, ...props }) => (
-                  <tr className="hover:bg-white/[0.03] transition-colors odd:bg-white/[0.01]" {...props} />
-                ),
-                p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed" {...props} />,
-                h1: ({ node, ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 flex items-center gap-2" {...props} />,
-                h2: ({ node, ...props }) => <h2 className="text-base font-bold text-cyan-200 mt-3 mb-1.5" {...props} />,
-                h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-cyan-300 mt-2.5 mb-1" {...props} />,
-                ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1 my-2 text-slate-300" {...props} />,
-                ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1 my-2 text-slate-300" {...props} />,
-                li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
-                code: ({ node, className, children, ...props }: any) => {
-                  const isInline = !className && typeof children === "string" && !children.includes("\n");
-                  return isInline ? (
-                    <code className="rounded bg-cyan-950/50 px-1.5 py-0.5 font-mono text-[12px] text-cyan-300 border border-cyan-500/20" {...props}>
-                      {children}
-                    </code>
-                  ) : (
-                    <code className="block rounded-lg bg-[#070b14] p-3 font-mono text-xs text-slate-300 border border-white/10 overflow-x-auto my-2" {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
-            >
-              {normalizedDisplayAnswer}
-            </ReactMarkdown>
-          </div>
+      <div className="flex-1 min-w-0 space-y-3">
+        {/* Header Task & Indicators */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold text-slate-300 tracking-wide font-sans">
+            {displayTask}
+          </span>
+
+          {isTranslating ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-cyan-400 animate-pulse ml-auto bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-0.5 rounded-full">
+              <Globe className="size-3 animate-spin" />
+              <span>{t("translating") || "Translating..."}</span>
+            </span>
+          ) : lang !== "en" ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full ml-auto">
+              <Globe className="size-3" />
+              <span className="uppercase font-bold">{lang}</span>
+            </span>
+          ) : null}
+        </div>
+
+        {/* Clean Natural Markdown Flow */}
+        <div className="text-slate-100 text-sm sm:text-[15px] leading-relaxed font-sans prose-space max-w-none">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkMath]}
+            rehypePlugins={[rehypeKatex]}
+            components={{
+              table: ({ node, ...props }) => (
+                <div className="my-3.5 w-full overflow-x-auto rounded-xl border border-white/10 bg-black/40 backdrop-blur-sm shadow-sm">
+                  <table className="w-full border-collapse text-left text-xs sm:text-sm text-slate-200" {...props} />
+                </div>
+              ),
+              thead: ({ node, ...props }) => (
+                <thead className="bg-white/5 border-b border-white/10 text-slate-300 font-semibold tracking-wider text-[11px] sm:text-xs uppercase font-mono" {...props} />
+              ),
+              th: ({ node, ...props }) => (
+                <th className="px-3.5 py-2 font-bold border-r border-white/10 last:border-r-0 whitespace-nowrap" {...props} />
+              ),
+              td: ({ node, ...props }) => (
+                <td className="px-3.5 py-2 border-t border-white/5 border-r border-white/5 last:border-r-0 leading-normal" {...props} />
+              ),
+              tr: ({ node, ...props }) => (
+                <tr className="hover:bg-white/[0.03] transition-colors odd:bg-white/[0.01]" {...props} />
+              ),
+              p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed text-slate-200" {...props} />,
+              h1: ({ node, ...props }) => <h1 className="text-lg font-bold text-white mt-4 mb-2 flex items-center gap-2" {...props} />,
+              h2: ({ node, ...props }) => <h2 className="text-base font-bold text-cyan-200 mt-3 mb-1.5" {...props} />,
+              h3: ({ node, ...props }) => <h3 className="text-sm font-semibold text-cyan-300 mt-2.5 mb-1" {...props} />,
+              ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1.5 my-2.5 text-slate-300" {...props} />,
+              ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1.5 my-2.5 text-slate-300" {...props} />,
+              li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+              code: ({ node, className, children, ...props }: any) => {
+                const isInline = !className && typeof children === "string" && !children.includes("\n");
+                return isInline ? (
+                  <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[12px] text-cyan-300 border border-white/10" {...props}>
+                    {children}
+                  </code>
+                ) : (
+                  <code className="block rounded-xl bg-[#090f1d] p-3 font-mono text-xs text-slate-300 border border-white/10 overflow-x-auto my-2.5" {...props}>
+                    {children}
+                  </code>
+                );
+              },
+            }}
+          >
+            {normalizedDisplayAnswer}
+          </ReactMarkdown>
+        </div>
+
+        {/* Minimal Action Toolbar (Copy, TTS, Confidence) */}
+        <div className="flex items-center gap-2 pt-1 text-xs text-slate-400 flex-wrap">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            title="Copy answer"
+          >
+            {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+            <span>{copied ? "Copied" : "Copy"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleSpeak}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              isSpeaking
+                ? "bg-rose-500/20 text-rose-300"
+                : "hover:bg-white/10 text-slate-400 hover:text-white"
+            }`}
+            title={isSpeaking ? (t("voice.stopSpeaking") || "Stop speaking") : (t("voice.speakResponse") || "Read response aloud (TTS)")}
+          >
+            {isSpeaking ? <VolumeX className="size-3.5 text-rose-400" /> : <Volume2 className="size-3.5" />}
+            <span>{isSpeaking ? (t("voice.stopSpeaking") || "Stop") : "Read aloud"}</span>
+          </button>
+
           {shouldShowConfidence && ratio !== null && (
-            <div className="mt-4 pt-4 border-t border-white/5">
-              <div className="flex justify-between mb-1.5">
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{t("confidence")}</span>
-                <span className="text-xs font-bold font-mono text-white">{conf}</span>
-              </div>
-              <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-700"
-                  style={{ width: `${ratio * 100}%` }} />
+            <div className="flex items-center gap-2 ml-auto text-[11px] text-slate-400 font-mono">
+              <span>{t("confidence") || "Confidence"}: {conf}</span>
+              <div className="w-16 h-1 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${ratio * 100}%` }} />
               </div>
             </div>
           )}
@@ -2471,51 +2478,46 @@ export default function Index() {
                   {messages.map((msg) => {
                     if (msg.role === "user") {
                       return (
-                        <div key={msg.id} className="flex gap-4 items-start justify-end">
-                          <div className="max-w-[85%] space-y-3 min-w-0">
-                            {msg.images && msg.images.length > 0 && (
-                              <div className="flex flex-wrap gap-2 mb-2 justify-end">
-                                {msg.images.filter(Boolean).map((img) => img.previewUrl ? (
-                                  <div key={img.id} className="relative group cursor-zoom-in" onClick={() => setLightboxData({ url: img.previewUrl!, boxes: [] })}>
-                                    <img src={img.previewUrl} alt={img.file.name}
-                                      className="rounded-xl border border-white/10 max-h-32 w-auto object-cover shadow-sm hover:ring-2 hover:ring-cyan-400/40 transition-all" />
-                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                      <ZoomIn className="size-5 text-white drop-shadow-lg" />
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const a = document.createElement("a");
-                                        a.href = img.previewUrl!;
-                                        a.download = img.file.name || `uploaded-${Date.now()}.png`;
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        document.body.removeChild(a);
-                                      }}
-                                      title="Download image"
-                                      className="absolute top-1.5 right-1.5 z-10 flex items-center justify-center size-6 rounded-md bg-black/70 hover:bg-black/90 text-cyan-400 border border-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 hover:scale-110 transition-all cursor-pointer shadow-md"
-                                    >
-                                      <DownloadCloud className="size-3.5" />
-                                    </button>
+                        <div key={msg.id} className="flex flex-col items-end gap-2 max-w-[85%] sm:max-w-[75%] ml-auto mb-6">
+                          {msg.images && msg.images.length > 0 && (
+                            <div className="flex flex-wrap gap-2 justify-end">
+                              {msg.images.filter(Boolean).map((img) => img.previewUrl ? (
+                                <div key={img.id} className="relative group cursor-zoom-in rounded-xl overflow-hidden border border-white/15 shadow-md bg-[#0a1020]" onClick={() => setLightboxData({ url: img.previewUrl!, boxes: [] })}>
+                                  <img src={img.previewUrl} alt={img.file.name}
+                                    className="max-h-36 sm:max-h-44 w-auto object-cover hover:scale-105 transition-transform duration-200" />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                    <ZoomIn className="size-5 text-white drop-shadow-lg" />
                                   </div>
-                                ) : (
-                                  <div key={img.id} className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-slate-400 shadow-sm">
-                                    <FileImage className="size-3.5 shrink-0" />
-                                    <span className="truncate font-mono max-w-[100px]">{img.file.name}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {msg.text && (
-                              <div className="rounded-2xl bg-cyan-500/10 border border-cyan-500/20 text-slate-200 px-4 py-3 text-sm leading-relaxed shadow-sm">
-                                {msg.text}
-                              </div>
-                            )}
-                          </div>
-                          <div className="shrink-0 flex size-8 items-center justify-center rounded-full bg-white/10 border border-white/10 mt-1">
-                            <User className="size-4 text-slate-300" />
-                          </div>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const a = document.createElement("a");
+                                      a.href = img.previewUrl!;
+                                      a.download = img.file.name || `uploaded-${Date.now()}.png`;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      document.body.removeChild(a);
+                                    }}
+                                    title="Download image"
+                                    className="absolute top-1.5 right-1.5 z-10 flex items-center justify-center size-6 rounded-md bg-black/70 hover:bg-black/90 text-cyan-400 border border-white/20 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-md"
+                                  >
+                                    <DownloadCloud className="size-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div key={img.id} className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-slate-400 shadow-sm font-mono">
+                                  <FileImage className="size-3.5 shrink-0" />
+                                  <span className="truncate max-w-[120px]">{img.file.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {msg.text && (
+                            <div className="rounded-2xl rounded-tr-sm bg-[#1e293b]/90 border border-white/10 text-slate-100 px-4.5 py-3 text-sm sm:text-[15px] leading-relaxed shadow-sm break-words">
+                              {msg.text}
+                            </div>
+                          )}
                         </div>
                       );
                     }

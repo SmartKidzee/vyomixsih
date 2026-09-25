@@ -14,7 +14,7 @@ export interface ScrollExpandProps {
   mediaType?: 'image' | 'video';
   poster?: string;
   alt?: string;
-  title?: string;
+  title?: React.ReactNode;
   scrollHint?: string;
   startWidth?: number;
   startHeight?: number;

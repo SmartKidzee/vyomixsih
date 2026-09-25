@@ -5,6 +5,7 @@
   overflow: hidden;
   pointer-events: none;
   isolation: isolate;
+  touch-action: pan-y;
 }
 
 .aero-shards__canvas {

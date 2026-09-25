@@ -382,13 +382,13 @@ fn mobilePath(seedPhase: f32, distance: f32, aspect: f32) -> PathSample {
   let t = mobileArc(phase);
   let derivative = vec3f(
     aspect * 2.56,
-    cos(t * pi) * pi * 0.28 + cos(t * pi * 3.0) * pi * 3.0 * 0.06,
+    cos(t * pi) * pi * 0.42 + cos(t * pi * 3.0) * pi * 3.0 * 0.08,
     -sin(t * pi * 2.0) * pi * 2.0 * 0.16,
   );
   var sample: PathSample;
   sample.position = vec3f(
     mix(-aspect * 1.28, aspect * 1.28, t),
-    -0.86 + sin(t * pi) * 0.28 + sin(t * pi * 3.0) * 0.06,
+    -0.05 + sin(t * pi) * 0.45 + sin(t * pi * 3.0) * 0.08,
     cos(t * pi * 2.0) * 0.16,
   );
   sample.tangent = safeNormalize(derivative);
@@ -412,7 +412,7 @@ fn weightedPath(seedPhase: f32, phaseOffset: f32, aspect: f32, weights: vec4f) -
     }
     if (weights.w > 0.0001) {
       let wide = fullPath(phase, 0.0, aspect);
-      result.position += wide.position * weights.w;
+      result.position += vec3f(wide.position.x, wide.position.y * 1.65, wide.position.z) * weights.w;
       result.tangent += wide.tangent * weights.w;
     }
   } else {
@@ -619,7 +619,8 @@ fn vs_main(
   let bankedFacing = facing * rollCos - side * rollSin;
   let depthScale = mix(0.56, 1.58, clamp(renderPosition.z * 0.62 + 0.5, 0.0, 1.0));
   let scaleShape = 0.46 + seedScale * 0.58 + pow(seedScale, 12.0) * 1.55;
-  let size = view.viewport.y * scaleShape * depthScale * (1.0 - view.gather.z * 0.3);
+  let mobileSizeBoost = select(1.0, 1.4, aspect < 0.82);
+  let size = view.viewport.y * scaleShape * depthScale * (1.0 - view.gather.z * 0.3) * mobileSizeBoost;
   let width = size * 0.72;
   let lengthScale = size * 1.26 * view.effects.z;
   let world = renderPosition
@@ -1247,6 +1248,119 @@ export interface AeroShardsProps {
   paused?: boolean;
   className?: string;
   onError?: (error: Error) => void;
+}
+
+/**
+ * Mobile and Non-WebGPU fluid crystalline shards fallback.
+ * Automatically runs on mobile devices or browsers without WebGPU support.
+ */
+function MobileCanvasFallback({
+  backgroundColor = "#060b18",
+  shardColor = "#38bdf8",
+  accentColor = "#6366f1",
+}: {
+  backgroundColor?: string;
+  shardColor?: string;
+  accentColor?: string;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let width = (canvas.width = canvas.clientWidth || window.innerWidth);
+    let height = (canvas.height = canvas.clientHeight || window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = canvas.clientWidth || window.innerWidth;
+      height = canvas.height = canvas.clientHeight || window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+
+    const count = 38;
+    const shards = Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      size: 14 + Math.random() * 22,
+      aspect: 0.35 + Math.random() * 0.35,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.012,
+      speedX: 0.3 + Math.random() * 0.6,
+      speedY: -0.15 + (Math.random() - 0.5) * 0.3,
+      opacity: 0.35 + Math.random() * 0.5,
+    }));
+
+    let lastTime = performance.now();
+    const render = (time: number) => {
+      const dt = Math.min((time - lastTime) / 1000, 0.1);
+      lastTime = time;
+
+      ctx.clearRect(0, 0, width, height);
+
+      shards.forEach((s) => {
+        s.x += s.speedX * 60 * dt;
+        s.y += s.speedY * 60 * dt;
+        s.rotation += s.rotSpeed;
+
+        if (s.x > width + 40) s.x = -40;
+        if (s.y > height + 40) s.y = -40;
+        if (s.y < -40) s.y = height + 40;
+
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.rotation);
+
+        const w = s.size * s.aspect;
+        const h = s.size;
+
+        ctx.beginPath();
+        ctx.moveTo(0, -h);
+        ctx.lineTo(w, 0);
+        ctx.lineTo(0, h);
+        ctx.lineTo(-w, 0);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(-w, -h, w, h);
+        grad.addColorStop(0, shardColor);
+        grad.addColorStop(0.55, accentColor);
+        grad.addColorStop(1, "rgba(255, 255, 255, 0.95)");
+
+        ctx.fillStyle = grad;
+        ctx.globalAlpha = s.opacity;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(0, -h);
+        ctx.lineTo(0, h);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        ctx.restore();
+      });
+
+      animId = requestAnimationFrame(render);
+    };
+
+    animId = requestAnimationFrame(render);
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [backgroundColor, shardColor, accentColor]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ opacity: 0.95 }}
+    />
+  );
 }
 
 export default function AeroShards({
@@ -2040,6 +2154,7 @@ export default function AeroShards({
     >
       {hasError ? (
         <div className="aero-shards__fallback">
+          <MobileCanvasFallback backgroundColor={backgroundColor} shardColor={shardColor} accentColor={accentColor} />
           <div className="aero-shards__fallback-grid" />
         </div>
       ) : (
