@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { LoaderCircle, MapPin, Search, X } from "lucide-react";
+import { History, LoaderCircle, MapPin, Search, X } from "lucide-react";
 import { parseCoordinates, searchPlaces, type GeocodingResult } from "@/services/geocoding";
 
 interface LocationSearchProps {
@@ -8,6 +8,25 @@ interface LocationSearchProps {
 }
 
 const coordinateInputPattern = /^\(?\s*-?\d+(?:\.\d+)?\s*(?:,|\s)\s*-?\d+(?:\.\d+)?\s*\)?$/;
+const recentSearchesStorageKey = "vyomix.recent-location-searches";
+
+function loadRecentSearches(): GeocodingResult[] {
+  try {
+    const stored = window.localStorage.getItem(recentSearchesStorageKey);
+    const parsed: unknown = stored ? JSON.parse(stored) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is GeocodingResult =>
+      item !== null &&
+      typeof item === "object" &&
+      typeof item.id === "string" &&
+      typeof item.name === "string" &&
+      Number.isFinite(item.latitude) &&
+      Number.isFinite(item.longitude)
+    ).slice(0, 4);
+  } catch {
+    return [];
+  }
+}
 
 export function LocationSearch({ onSelect, className = "" }: LocationSearchProps) {
   const [query, setQuery] = useState("");
@@ -16,8 +35,10 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<GeocodingResult[]>(loadRecentSearches);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const selectedQueryRef = useRef<string | null>(null);
   const listId = useId();
 
   useEffect(() => {
@@ -29,6 +50,12 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
   }, []);
 
   useEffect(() => {
+    if (selectedQueryRef.current === query) {
+      selectedQueryRef.current = null;
+      return;
+    }
+    selectedQueryRef.current = null;
+
     const trimmed = query.trim();
     setActiveIndex(-1);
     setError(null);
@@ -92,6 +119,17 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
   }, [query]);
 
   const selectLocation = (location: GeocodingResult) => {
+    const updatedRecentSearches = [
+      location,
+      ...recentSearches.filter((recent) => recent.latitude !== location.latitude || recent.longitude !== location.longitude),
+    ].slice(0, 4);
+    setRecentSearches(updatedRecentSearches);
+    try {
+      window.localStorage.setItem(recentSearchesStorageKey, JSON.stringify(updatedRecentSearches));
+    } catch {
+      // Keep the current session usable if browser storage is unavailable.
+    }
+    selectedQueryRef.current = location.name;
     setQuery(location.name);
     setOpen(false);
     setResults([]);
@@ -101,7 +139,11 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
 
   const submitSearch = () => {
     const trimmed = query.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      const recent = recentSearches[activeIndex] ?? recentSearches[0];
+      if (recent) selectLocation(recent);
+      return;
+    }
 
     const coordinates = parseCoordinates(trimmed);
     if (coordinates) {
@@ -122,14 +164,15 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown" && results.length > 0) {
+    const visibleResults = query.trim() ? results : recentSearches;
+    if (event.key === "ArrowDown" && visibleResults.length > 0) {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex((current) => (current + 1) % results.length);
-    } else if (event.key === "ArrowUp" && results.length > 0) {
+      setActiveIndex((current) => (current + 1) % visibleResults.length);
+    } else if (event.key === "ArrowUp" && visibleResults.length > 0) {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex((current) => current <= 0 ? results.length - 1 : current - 1);
+      setActiveIndex((current) => current <= 0 ? visibleResults.length - 1 : current - 1);
     } else if (event.key === "Enter") {
       event.preventDefault();
       submitSearch();
@@ -138,6 +181,9 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
       setActiveIndex(-1);
     }
   };
+
+  const visibleResults = query.trim() ? results : recentSearches;
+  const showingRecentSearches = !query.trim() && recentSearches.length > 0;
 
   return (
     <div ref={rootRef} className={`w-full min-w-0 ${className}`}>
@@ -148,7 +194,7 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          onFocus={() => { if (query.trim()) setOpen(true); }}
+          onFocus={() => { if (query.trim() || recentSearches.length > 0) setOpen(true); }}
           onKeyDown={handleKeyDown}
           placeholder="Search places or coordinates"
           autoComplete="off"
@@ -165,7 +211,7 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
         ) : query ? (
           <button
             type="button"
-            onClick={() => { setQuery(""); setResults([]); setError(null); setOpen(false); inputRef.current?.focus(); }}
+            onClick={() => { setQuery(""); setResults([]); setError(null); setOpen(recentSearches.length > 0); inputRef.current?.focus(); }}
             className="flex size-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
             aria-label="Clear location search"
           >
@@ -183,10 +229,15 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
         </button>
       </div>
 
-      {open && (loading || results.length > 0 || error) && (
+      {open && (loading || visibleResults.length > 0 || error) && (
         <div className="mt-2 overflow-hidden rounded-2xl border border-white/15 bg-[#0c1428]/95 shadow-[0_16px_40px_rgba(0,0,0,0.65)] backdrop-blur-2xl">
           <ul id={listId} role="listbox" aria-label="Location suggestions" className="max-h-64 overflow-y-auto p-1.5">
-            {results.map((place, index) => (
+            {showingRecentSearches && (
+              <li className="flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                <History className="size-3" /> Recent searches
+              </li>
+            )}
+            {visibleResults.map((place, index) => (
               <li key={place.id} role="option" aria-selected={index === activeIndex} id={`${listId}-${index}`}>
                 <button
                   type="button"
@@ -196,7 +247,9 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
                     index === activeIndex ? "bg-cyan-500/15 text-white" : "text-slate-200 hover:bg-white/5"
                   }`}
                 >
-                  <MapPin className="size-4 shrink-0 text-cyan-300" />
+                  {showingRecentSearches
+                    ? <History className="size-4 shrink-0 text-slate-400" />
+                    : <MapPin className="size-4 shrink-0 text-cyan-300" />}
                   <span className="truncate text-sm">{place.name}</span>
                 </button>
               </li>
@@ -206,7 +259,7 @@ export function LocationSearch({ onSelect, className = "" }: LocationSearchProps
                 <LoaderCircle className="size-4 animate-spin text-cyan-300" /> Searching locations…
               </li>
             )}
-            {!loading && !error && results.length === 0 && (
+            {!loading && !error && query.trim() && results.length === 0 && (
               <li className="px-3 py-3 text-sm text-slate-400">No locations found. Try a different search.</li>
             )}
             {error && <li role="status" className="px-3 py-3 text-xs leading-relaxed text-amber-200/90">{error}</li>}
