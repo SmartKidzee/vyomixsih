@@ -96,7 +96,7 @@ export default function HomePage() {
                 </span>
                 <span className="hidden sm:inline-block text-slate-500 font-light">|</span>
                 <span className="hidden sm:inline-block text-xs font-semibold text-slate-200 tracking-tight truncate">
-                  {t("app.title", "Earth Query Lens")}
+                  {t("app.title", "VYOMIX | SatQuery AI")}
                 </span>
                 <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[8.5px] sm:text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shrink-0">
                   {t("nav.sih", "SIH 2026")}
@@ -212,7 +212,7 @@ export default function HomePage() {
               to="/app"
               className="group w-full sm:w-auto inline-flex items-center justify-center gap-3 px-7 py-3.5 sm:px-10 sm:py-4.5 rounded-2xl bg-gradient-to-r from-cyan-400/90 via-sky-400/90 to-blue-500/90 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black text-base sm:text-lg tracking-tight backdrop-blur-xl border border-white/40 shadow-[0_12px_40px_rgba(56,189,248,0.35)] hover:shadow-[0_16px_50px_rgba(56,189,248,0.55)] transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
             >
-              <span>{t("home.hero.cta", "Launch Earth Query Lens")}</span>
+              <span>{t("home.hero.cta", "Launch VYOMIX | SatQuery AI")}</span>
               <ArrowRight className="size-5 transition-transform group-hover:translate-x-1.5" />
             </Link>
           </div>
@@ -306,7 +306,7 @@ export default function HomePage() {
             </h2>
 
             <p className="text-base sm:text-xl text-slate-200 max-w-2xl mx-auto leading-relaxed font-medium">
-              {t("home.scroll.desc", "From glaciology and glacial lake outbursts to coastal defense monitoring and delta agricultural belts, Earth Query Lens synthesizes optical and radar passes into zero-latency geospatial intelligence.")}
+              {t("home.scroll.desc", "From glaciology and glacial lake outbursts to coastal defense monitoring and delta agricultural belts, VYOMIX | SatQuery AI synthesizes optical and radar passes into zero-latency geospatial intelligence.")}
             </p>
 
             <div className="pt-2">
@@ -491,7 +491,7 @@ export default function HomePage() {
             </div>
             <div>
               <div className="text-base font-black text-white tracking-wide">
-                VYOMIX <span className="text-slate-400 font-normal">· {t("home.footer.brand", "Earth Query Lens")}</span>
+                VYOMIX <span className="text-slate-400 font-normal">· {t("home.footer.brand", "VYOMIX | SatQuery AI")}</span>
               </div>
               <div className="text-xs text-cyan-400 font-mono">
                 {t("home.footer.sih", "Smart India Hackathon (SIH 2026) Initiative")}
@@ -512,7 +512,7 @@ export default function HomePage() {
           </div>
 
           <div className="text-xs text-slate-400 font-mono">
-            {t("home.footer.copy", "© 2026 Vyomix · Earth Query Lens. All rights reserved.")}
+            {t("home.footer.copy", "© 2026 VYOMIX | SatQuery AI. All rights reserved.")}
           </div>
         </div>
       </footer>

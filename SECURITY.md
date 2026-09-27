@@ -1,6 +1,6 @@
 # Security Policy
 
-Vyomix Earth Query Lens is maintained by Shreyas J ([@SmartKidzee](https://github.com/SmartKidzee)) and the Vyomix Core Development Team. We are committed to ensuring the integrity, confidentiality, and resilience of our remote sensing and satellite analytics infrastructure.
+VYOMIX | SatQuery AI is maintained by Shreyas J ([@SmartKidzee](https://github.com/SmartKidzee)) and the Vyomix Core Development Team. We are committed to ensuring the integrity, confidentiality, and resilience of our remote sensing and satellite analytics infrastructure.
 
 ---
 
