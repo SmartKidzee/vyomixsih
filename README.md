@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="public/logo.svg" alt="Vyomix Earth Query Lens Logo" width="130" />
+  <img src="public/logo.svg" alt="VYOMTX | SatQuery A1 Logo" width="130" />
 
-  # 🛰️ VYOMIX · Earth Query Lens
+  # 🛰️ VYOMTX | SatQuery A1
   ### Multimodal Satellite Intelligence · Dual-Spectrum Radar Fusion · 22-Language Indic Remote Sensing
 
   **Smart India Hackathon 2026 (SIH 2026)** · Engineered by **Shreyas J** ([@SmartKidzee](https://github.com/SmartKidzee)) & The Vyomix Team
@@ -49,7 +49,7 @@
 
 ## 🌟 Executive Overview
 
-**Vyomix · Earth Query Lens** is an operational-grade Earth observation AI platform designed for defense reconnaissance, disaster relief operations, environmental forensics, and municipal land-auditing. Engineered for the **Smart India Hackathon (SIH 2026)**, it overcomes the critical vulnerability of traditional optical satellites: **dense cloud cover, monsoon rain, smoke, and nighttime occlusion**.
+**VYOMTX | SatQuery A1** is an operational-grade Earth observation AI platform designed for defense reconnaissance, disaster relief operations, environmental forensics, and municipal land-auditing. Engineered for the **Smart India Hackathon (SIH 2026)**, it overcomes the critical vulnerability of traditional optical satellites: **dense cloud cover, monsoon rain, smoke, and nighttime occlusion**.
 
 By fusing **high-resolution optical imagery** with **Synthetic Aperture Radar (SAR C-Band)**, Vyomix pierces cloud decks and weather disturbances. The platform executes neural classification in-browser via **WebAssembly SIMD**, eliminates hallucinated measurements through **deterministic Ground Sampling Distance (GSD) calculus**, provides **Indic voice dictation in 22 languages**, and compiles **multi-page tamper-evident forensic PDF dossiers** with embedded highlighted overlays.
 

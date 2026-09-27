@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea or enhancement for the Vyomix Earth Query Lens platform
+about: Suggest an idea or enhancement for the VYOMTX | SatQuery A1 platform
 title: "[FEATURE]: "
 labels: ["enhancement"]
 assignees: ""

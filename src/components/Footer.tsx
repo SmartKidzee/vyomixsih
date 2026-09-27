@@ -17,7 +17,7 @@ export function Footer() {
                   VYOMIX PRESENTS
                 </span>
                 <span className="font-serif text-2xl font-bold tracking-tight text-slate-950">
-                  Earth Query Lens
+                  VYOMTX | SatQuery A1
                 </span>
               </div>
             </div>
@@ -123,7 +123,7 @@ export function Footer() {
         {/* Bottom Bar */}
         <div className="mt-12 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200/80 pt-6 text-xs font-medium text-slate-500">
           <p>© 2026 VYOMIX. All rights reserved.</p>
-          <p className="font-semibold text-slate-700">Earth Query Lens is a VYOMIX project.</p>
+          <p className="font-semibold text-slate-700">VYOMTX | SatQuery A1 is a VYOMIX project.</p>
         </div>
       </div>
     </footer>

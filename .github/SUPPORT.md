@@ -1,6 +1,6 @@
-# Support Guidelines for Vyomix · Earth Query Lens
+# Support Guidelines for VYOMTX | SatQuery A1
 
-Welcome to the **Vyomix · Earth Query Lens** support center. We appreciate your interest in our satellite intelligence and multimodal remote sensing platform.
+Welcome to the **VYOMTX | SatQuery A1** support center. We appreciate your interest in our satellite intelligence and multimodal remote sensing platform.
 
 ---
 
