@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Camera, MousePointer, MapPin, Loader2, History, ChevronsLeftRight, ArrowLeftRight, Radio, Satellite, Sparkles } from "lucide-react";
+import { LocationSearch } from "@/components/LocationSearch";
+import type { GeocodingResult } from "@/services/geocoding";
 import html2canvas from "html2canvas";
 import * as Cesium from "cesium";
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -586,6 +588,8 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null);
   const locationPulseRef = useRef<Cesium.Entity | null>(null);
+  const searchMarkerRef = useRef<Cesium.Entity | null>(null);
+  const searchMarkerTimerRef = useRef<number | null>(null);
 
   // Layer Refs
   const baseLayerRef = useRef<Cesium.ImageryLayer | null>(null);
@@ -653,6 +657,7 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
     handlerRef.current = handler;
 
     return () => {
+      if (searchMarkerTimerRef.current !== null) window.clearTimeout(searchMarkerTimerRef.current);
       handler.destroy();
       viewer.destroy();
       viewerRef.current = null;
@@ -791,6 +796,52 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
         duration: 1.8,
       });
     }
+  };
+
+  const handleSearchLocation = (location: GeocodingResult) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+
+    if (searchMarkerTimerRef.current !== null) window.clearTimeout(searchMarkerTimerRef.current);
+    if (searchMarkerRef.current) viewer.entities.remove(searchMarkerRef.current);
+
+    searchMarkerRef.current = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(location.longitude, location.latitude),
+      point: {
+        pixelSize: 14,
+        color: Cesium.Color.fromCssColorString("#22d3ee"),
+        outlineColor: Cesium.Color.WHITE.withAlpha(0.95),
+        outlineWidth: 3,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      ellipse: {
+        semiMajorAxis: 55,
+        semiMinorAxis: 55,
+        material: Cesium.Color.fromCssColorString("#22d3ee").withAlpha(0.12),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString("#22d3ee").withAlpha(0.7),
+        outlineWidth: 2,
+        height: 0,
+      },
+    });
+
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(location.longitude, location.latitude, 12000),
+      orientation: {
+        heading: 0.0,
+        pitch: Cesium.Math.toRadians(-90.0),
+        roll: 0.0,
+      },
+      duration: 2.2,
+    });
+
+    searchMarkerTimerRef.current = window.setTimeout(() => {
+      if (viewerRef.current && searchMarkerRef.current) {
+        viewerRef.current.entities.remove(searchMarkerRef.current);
+        searchMarkerRef.current = null;
+      }
+      searchMarkerTimerRef.current = null;
+    }, 8000);
   };
 
   // Safe helpers that prevent any raw "benchmark.*" translation key leaks
@@ -1019,6 +1070,7 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
 
     // Temporarily hide any location pulse markers so screenshot is 100% clean satellite imagery
     if (locationPulseRef.current) locationPulseRef.current.show = false;
+    if (searchMarkerRef.current) searchMarkerRef.current.show = false;
 
     // Compute bounding box coordinates of current camera view
     const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
@@ -1099,6 +1151,7 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
       console.error("Bi-temporal capture failed:", err);
     } finally {
       if (locationPulseRef.current) locationPulseRef.current.show = true;
+      if (searchMarkerRef.current) searchMarkerRef.current.show = true;
       setCapturing(false);
       setCaptureStatus("");
     }
@@ -1117,6 +1170,7 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
       viewer.entities.remove(finalEntityRef.current);
       finalEntityRef.current = null;
     }
+    if (searchMarkerRef.current) searchMarkerRef.current.show = false;
     await ensureTilesReady(viewer, 1200);
 
     try {
@@ -1133,12 +1187,14 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
         } else {
           onSelectBounds(drawnBounds);
         }
+        if (searchMarkerRef.current) searchMarkerRef.current.show = true;
         setCapturing(false);
         setDrawnBounds(null);
       }, "image/png");
     } catch (err) {
       console.error("Failed to capture map:", err);
       onSelectBounds(drawnBounds);
+      if (searchMarkerRef.current) searchMarkerRef.current.show = true;
       setCapturing(false);
     }
   };
@@ -1327,6 +1383,15 @@ export function MapSelector({ onSelectBounds }: MapSelectorProps) {
       {/* ========================================================================= */}
       <div className="flex-1 relative w-full min-h-0 overflow-hidden">
         <div className="absolute inset-0 w-full h-full" ref={containerRef} />
+
+        <LocationSearch
+          onSelect={handleSearchLocation}
+          className={`absolute z-30 ${
+            isBitemporal
+              ? "top-[10.5rem] left-4 right-4 sm:right-auto sm:w-[26rem]"
+              : "top-[3.75rem] left-4 right-4 sm:top-3 sm:left-auto sm:right-4 sm:w-[26rem]"
+          }`}
+        />
 
         {/* Standard Single Map View: Basemap Selector Pill */}
         {!isBitemporal && (
