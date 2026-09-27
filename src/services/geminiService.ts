@@ -1112,14 +1112,14 @@ export async function answerGeneralEarthQuery(
   const apiKey = getApiKey();
   if (!apiKey) {
     return {
-      answer: "Welcome to VYOMTX | SatQuery A1! Please configure an API Key in Settings to explore satellite data, or ask questions about remote sensing, SAR, NDVI, and Earth observation.",
+      answer: "Welcome to VYOMIX | SatQuery AI! Please configure an API Key in Settings to explore satellite data, or ask questions about remote sensing, SAR, NDVI, and Earth observation.",
       confidence: 100,
       model: "SatVision Assistant",
       task: "Geospatial Knowledge & Remote Sensing",
     };
   }
 
-  const promptText = `You are VYOMTX | SatQuery A1 AI, an expert Earth Observation, Satellite Remote Sensing, and Geospatial Intelligence Assistant.
+  const promptText = `You are VYOMIX | SatQuery AI AI, an expert Earth Observation, Satellite Remote Sensing, and Geospatial Intelligence Assistant.
 Provide a clear, technically sound, and structured response in Markdown to the following user query.
 
 Query: "${query}"
@@ -1127,7 +1127,7 @@ Query: "${query}"
 RULES:
 1. No satellite images are attached to this prompt. DO NOT fabricate observations or claim you see an image.
 2. If the user asks a remote sensing or geospatial science question (e.g. NDVI, SAR polarimetry, multispectral band ratios, spatial resolution, optical vs radar sensors, Sentinel-1/2, Landsat, etc.), provide an expert, educational, and accurate explanation with formatting, bullet points, or formulas.
-3. If the user asks a simple greeting or general question (e.g. "hi", "who are you", "what can you do"), greet them warmly and concisely introduce VYOMTX | SatQuery A1 capabilities (single image feature extraction, multi-temporal change detection, land-cover quantification, and map area inspection).
+3. If the user asks a simple greeting or general question (e.g. "hi", "who are you", "what can you do"), greet them warmly and concisely introduce VYOMIX | SatQuery AI capabilities (single image feature extraction, multi-temporal change detection, land-cover quantification, and map area inspection).
 4. DO NOT generate fictional change metrics, pre/post event data, or bounding boxes.`;
 
   const allApiKeys = getApiKeys();
@@ -1175,7 +1175,7 @@ RULES:
   }
 
   return {
-    answer: "I am VYOMTX | SatQuery A1 AI. You can ask me any satellite remote sensing questions or upload imagery (via the upload button or the interactive Map tab) to perform optical/SAR classification and bi-temporal change detection.",
+    answer: "I am VYOMIX | SatQuery AI AI. You can ask me any satellite remote sensing questions or upload imagery (via the upload button or the interactive Map tab) to perform optical/SAR classification and bi-temporal change detection.",
     confidence: 90,
     model: "SatVision Assistant",
     task: "Geospatial Knowledge"
@@ -1194,7 +1194,7 @@ export async function answerFollowUpQuery(
 
   const parts: any[] = [];
   parts.push({
-    text: `You are VYOMTX | SatQuery A1 AI, an expert Earth Observation and Satellite Remote Sensing assistant.
+    text: `You are VYOMIX | SatQuery AI AI, an expert Earth Observation and Satellite Remote Sensing assistant.
 The user previously conducted satellite imagery analysis on the attached image(s) in this session.
 Now the user asks this follow-up question:
 "${query}"

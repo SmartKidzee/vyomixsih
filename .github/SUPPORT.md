@@ -1,6 +1,6 @@
-# Support Guidelines for VYOMTX | SatQuery A1
+# Support Guidelines for VYOMIX | SatQuery AI
 
-Welcome to the **VYOMTX | SatQuery A1** support center. We appreciate your interest in our satellite intelligence and multimodal remote sensing platform.
+Welcome to the **VYOMIX | SatQuery AI** support center. We appreciate your interest in our satellite intelligence and multimodal remote sensing platform.
 
 ---
 

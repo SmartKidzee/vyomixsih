@@ -35,7 +35,7 @@ export const LANGUAGES: { code: Language; label: string; nativeLabel: string }[]
 // Translation keys
 const translations: Partial<Record<Language, Record<string, string>>> = {
   en: {
-    "app.title": "VYOMTX | SatQuery A1",
+    "app.title": "VYOMIX | SatQuery AI",
     "app.subtitle": "Multimodal Geospatial AI",
     "nav.chat": "Chat",
     "nav.map": "Map",
@@ -156,7 +156,7 @@ const translations: Partial<Record<Language, Record<string, string>>> = {
     "home.hero.title2": "COMMAND ORBITAL",
     "home.hero.title3": "INTELLIGENCE.",
     "home.hero.desc": "Next-generation Earth observation intelligence fusing Optical & Synthetic Aperture Radar (SAR). Query complex satellite scenes in 22+ languages with native Indic voice grounding.",
-    "home.hero.cta": "Launch VYOMTX | SatQuery A1",
+    "home.hero.cta": "Launch VYOMIX | SatQuery AI",
     
     // Telemetry cards
     "home.hero.telemetry.radar.title": "RADAR SENSORS",
@@ -178,7 +178,7 @@ const translations: Partial<Record<Language, Record<string, string>>> = {
     "home.scroll.badge": "SENTINEL & BHUVAN OPEN GIS COMPATIBLE",
     "home.scroll.h1": "EVERY PIXEL AUDITED.",
     "home.scroll.h2": "EVERY SATELLITE PASS GROUNDED.",
-    "home.scroll.desc": "From glaciology and glacial lake outbursts to coastal defense monitoring and delta agricultural belts, VYOMTX | SatQuery A1 synthesizes optical and radar passes into zero-latency geospatial intelligence.",
+    "home.scroll.desc": "From glaciology and glacial lake outbursts to coastal defense monitoring and delta agricultural belts, VYOMIX | SatQuery AI synthesizes optical and radar passes into zero-latency geospatial intelligence.",
     "home.scroll.cta": "Enter Operational Studio",
 
     // ──────────────── MAGIC BENTO SECTION ────────────────
@@ -230,12 +230,12 @@ const translations: Partial<Record<Language, Record<string, string>>> = {
     "home.final.cta": "Launch Vyomix Operational Studio",
 
     // ──────────────── FOOTER ────────────────
-    "home.footer.brand": "VYOMTX | SatQuery A1",
+    "home.footer.brand": "VYOMIX | SatQuery AI",
     "home.footer.sih": "Smart India Hackathon (SIH 2026) Initiative",
     "home.footer.b1": "Open GIS & Satellite Pipeline",
     "home.footer.b2": "Optical + SAR Dual Spectrum",
     "home.footer.b3": "22+ Indic Languages",
-    "home.footer.copy": "© 2026 VYOMTX | SatQuery A1. All rights reserved.",
+    "home.footer.copy": "© 2026 VYOMIX | SatQuery AI. All rights reserved.",
   },
   hi: {
     "app.title": "अर्थ क्वेरी लेंस",

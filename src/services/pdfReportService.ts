@@ -294,7 +294,7 @@ export async function generateChatPdf(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(255, 255, 255);
-    doc.text("VYOMTX | SATQUERY A1", margin + 3, y + 5.8);
+    doc.text("VYOMIX | SATQUERY AI", margin + 3, y + 5.8);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);

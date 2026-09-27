@@ -10,11 +10,11 @@ export function AboutSection() {
         </div>
 
         <h2 className="font-serif text-3xl sm:text-4xl font-bold tracking-tight text-slate-950 mt-4">
-          About VYOMTX | SatQuery A1
+          About VYOMIX | SatQuery AI
         </h2>
 
         <p className="mt-4 text-base sm:text-lg leading-relaxed text-slate-700 font-medium max-w-4xl">
-          VYOMTX | SatQuery A1 is a multimodal satellite-imagery analysis platform designed to help users interact with optical and SAR imagery using natural-language queries.
+          VYOMIX | SatQuery AI is a multimodal satellite-imagery analysis platform designed to help users interact with optical and SAR imagery using natural-language queries.
         </p>
 
         <div className="mt-8 grid gap-6 sm:grid-cols-3">

@@ -1,6 +1,6 @@
-# Contributing to VYOMTX | SatQuery A1
+# Contributing to VYOMIX | SatQuery AI
 
-Thank you for your interest in contributing to **VYOMTX | SatQuery A1**. We welcome contributions from developers, geospatial analysts, data scientists, and UI/UX designers.
+Thank you for your interest in contributing to **VYOMIX | SatQuery AI**. We welcome contributions from developers, geospatial analysts, data scientists, and UI/UX designers.
 
 This project was engineered for the **Smart India Hackathon (SIH 2026)** by **Shreyas J** ([@SmartKidzee](https://github.com/SmartKidzee)) and the Vyomix Team.
 
